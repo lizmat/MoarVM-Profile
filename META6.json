@@ -1,0 +1,26 @@
+{
+  "auth": "zef:lizmat",
+  "authors": [
+    "Elizabeth Mattijsen"
+  ],
+  "build-depends": [
+  ],
+  "depends": [
+    "DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>"
+  ],
+  "description": "Raku interface to MoarVM profiles",
+  "license": "Artistic-2.0",
+  "name": "MoarVM::Profile",
+  "perl": "6.d",
+  "provides": {
+    "MoarVM::Profile": "lib/MoarVM/Profile.rakumod"
+  },
+  "resources": [
+  ],
+  "source-url": "",
+  "tags": [ "MOARVM", "PROFILE", "PERFORMANCE"
+  ],
+  "test-depends": [
+  ],
+  "version": "0.0.1"
+}
