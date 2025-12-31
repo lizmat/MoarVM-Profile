@@ -14,7 +14,16 @@ use MoarVM::Profile;
 
 =head1 DESCRIPTION
 
-MoarVM::Profile is ...
+The C<MoarVM::Profile> distribution provides a Raku interface for the
+information provided by the MoarVM/Rakudo code profiling information.
+It is intended to be used in generally applicable applications, but
+also for ad-hoc profiling situations and benchmarking.
+
+=head1 CREDITS
+
+The SQL used in this module have been mostly copied from the
+L<moarperf|https://github.com/timo/moarperf/blob/master/lib/ProfilerWeb.pm6>
+repository by I<Timo Paulssen>.
 
 =head1 AUTHOR
 
@@ -22,7 +31,7 @@ Elizabeth Mattijsen <liz@raku.rocks>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2025 Elizabeth Mattijsen
+Copyright 2026 Elizabeth Mattijsen
 
 This library is free software; you can redistribute it and/or modify it under the Artistic License 2.0.
 

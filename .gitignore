@@ -1,2 +1,5 @@
 .precomp/
 /MoarVM-Profile-*
+?
+/releases/
+foo*

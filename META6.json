@@ -6,7 +6,8 @@
   "build-depends": [
   ],
   "depends": [
-    "DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>"
+    "DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>",
+    "JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>"
   ],
   "description": "Raku interface to MoarVM profiles",
   "license": "Artistic-2.0",
@@ -17,8 +18,11 @@
   },
   "resources": [
   ],
-  "source-url": "",
-  "tags": [ "MOARVM", "PROFILE", "PERFORMANCE"
+  "source-url": "https://github.com/lizmat/MoarVM-Profile.git",
+  "tags": [
+    "MOARVM",
+    "PROFILE",
+    "PERFORMANCE"
   ],
   "test-depends": [
   ],
