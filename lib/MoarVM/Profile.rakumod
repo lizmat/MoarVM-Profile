@@ -45,8 +45,8 @@ class MoarVM::Profile::Type {
 # );
 
 class MoarVM::Profile::Routine {
-    has       $.profile;
-    has int32 @.parts is built(:bind);
+    has     $.profile;
+    has int @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::Routine: $profile, @a) {
         self.bless(:$profile, :parts(
@@ -114,7 +114,7 @@ class MoarVM::Profile::Routine {
 # );
 
 class MoarVM::Profile::Call {
-    has int32 @.parts is built(:bind);
+    has int @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::Call: @a) {
         self.bless(:parts(my int @parts = @a.map(*.Int)))
@@ -153,7 +153,7 @@ class MoarVM::Profile::Call {
 #  GROUP BY c.routine_id
 
 class MoarVM::Profile::RoutineOverview {
-    has int32 @.parts is built(:bind);
+    has int @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::RoutineOverview: @a) {
         self.bless(:parts(my int @parts = @a.map(*.Int)))
@@ -170,6 +170,19 @@ class MoarVM::Profile::RoutineOverview {
     method deopt-one(      MoarVM::Profile::RoutineOverview:D:) { @!parts[ 8] }
     method deopt-all(      MoarVM::Profile::RoutineOverview:D:) { @!parts[ 9] }
     method site-count(     MoarVM::Profile::RoutineOverview:D:) { @!parts[10] }
+
+    multi method gist(MoarVM::Profile::RoutineOverview:D:) {
+        my str @parts;
+        for <
+          id entries inclusive-time exclusive-time spesh-entries jit-entries
+          jit-entries inlined-entries osr deopt-one deopt-all site-count
+        > {
+            if self."$_"() -> $value {
+                @parts.push("$_: $value");
+            }
+        }
+        @parts.join("\n")
+    }
 }
 
 #- RoutineOverview -------------------------------------------------------------
@@ -188,7 +201,7 @@ class MoarVM::Profile::RoutineOverview {
 #  GROUP BY c.routine_id
 
 class MoarVM::Profile::SpeshOverview {
-    has int32 @.parts is built(:bind);
+    has int @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::SpeshOverview: @a) {
         self.bless(:parts(my int @parts = @a.map(*.Int)))
@@ -203,6 +216,33 @@ class MoarVM::Profile::SpeshOverview {
     method spesh-entries(  MoarVM::Profile::SpeshOverview:D:) { @!parts[6] }
     method jit-entries(    MoarVM::Profile::SpeshOverview:D:) { @!parts[7] }
     method sites(          MoarVM::Profile::SpeshOverview:D:) { @!parts[8] }
+
+    multi method gist(MoarVM::Profile::SpeshOverview:D:) {
+        my str @parts;
+        for <
+          id deopt-one deopt-all osr entries inlined-entries spesh-entries
+          jit-entries sites
+        > {
+            if self."$_"() -> $value {
+                @parts.push("$_: $value");
+            }
+        }
+        @parts.join("\n")
+    }
+
+    multi method gist(MoarVM::Profile::SpeshOverview:D:) {
+        qq:to/GIST/
+id:              $.id
+deopt-one:       $.deopt-one
+deopt-all:       $.deopt-all
+osr:             $.osr
+entries:         $.entries
+inlined-entries: $.inlined-entries
+spesh-entries:   $.spesh-entries
+jit-entries:     $.jit-entries
+sites:           $.sites
+GIST
+    }
 }
 
 #- Profile ---------------------------------------------------------------------
@@ -321,7 +361,7 @@ QUERY
 
 #say MoarVM::Profile::Routine.new( (0,"","",-1) );
 #my $profile := MoarVM::Profile.new("foo.db");
-#.say for $profile.routines.grep(*.is-user);
+#.say for $profile.routines.grep(*.is-user)>>.overview;
 #.say for $profile.spesh-overviews;
 
 # vim: expandtab shiftwidth=4
