@@ -45,8 +45,8 @@ class MoarVM::Profile::Type {
 # );
 
 class MoarVM::Profile::Routine {
-    has     $.profile;
-    has int @.parts is built(:bind);
+    has       $.profile;
+    has int32 @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::Routine: $profile, @a) {
         self.bless(:$profile, :parts(
@@ -55,8 +55,12 @@ class MoarVM::Profile::Routine {
         ))
     }
 
-    method id(MoarVM::Profile::Routine:D:) { @!parts[0] }
-    method name() {
+    method id(        MoarVM::Profile::Routine:D:) { @!parts[0] }
+    method name-index(MoarVM::Profile::Routine:D:) { @!parts[1] }
+    method line(      MoarVM::Profile::Routine:D:) { @!parts[2] }
+    method file-index(MoarVM::Profile::Routine:D:) { @!parts[3] }
+
+    method name(MoarVM::Profile::Routine:D:) {
         if @!parts[1] -> $index {
             @names[$index]
         }
@@ -64,10 +68,18 @@ class MoarVM::Profile::Routine {
             '(block)'
         }
     }
-    method line(MoarVM::Profile::Routine:D:) { @!parts[2] }
     method file(MoarVM::Profile::Routine:D:) { @names[@!parts[3]] }
 
     method is-block(MoarVM::Profile::Routine:D:) { @!parts[1] == 0 }
+
+    method is-core(MoarVM::Profile::Routine:D:) {
+        self.line < 0 || (self.file andthen .starts-with(
+          'SETTING::' | 'NQP::' | 'src/Perl6' | 'src/vm/moar' | 'src/main.nqp'
+        ))
+    }
+    method is-user(MoarVM::Profile::Routine:D:) {
+        !self.is-core
+    }
 
     multi method gist(MoarVM::Profile::Routine:D:) {
         "$.id: $.name ($.file:$.line)"
@@ -102,7 +114,7 @@ class MoarVM::Profile::Routine {
 # );
 
 class MoarVM::Profile::Call {
-    has int @.parts is built(:bind);
+    has int32 @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::Call: @a) {
         self.bless(:parts(my int @parts = @a.map(*.Int)))
@@ -141,7 +153,7 @@ class MoarVM::Profile::Call {
 #  GROUP BY c.routine_id
 
 class MoarVM::Profile::RoutineOverview {
-    has int @.parts is built(:bind);
+    has int32 @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::RoutineOverview: @a) {
         self.bless(:parts(my int @parts = @a.map(*.Int)))
@@ -176,7 +188,7 @@ class MoarVM::Profile::RoutineOverview {
 #  GROUP BY c.routine_id
 
 class MoarVM::Profile::SpeshOverview {
-    has int @.parts is built(:bind);
+    has int32 @.parts is built(:bind);
 
     multi method new(MoarVM::Profile::SpeshOverview: @a) {
         self.bless(:parts(my int @parts = @a.map(*.Int)))
@@ -226,12 +238,12 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
             @types
         }
         else {
-            $!types = my @types is default(Nil);
+            my @types is default(Nil);
             for $!db.query('SELECT * FROM types').arrays -> @attributes {
                 my $type := MoarVM::Profile::Type.new(@attributes);
                 @types[$type.id] := $type;
             }
-            @types
+            $!types := @types.List
         }
     }
 
@@ -240,12 +252,12 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
             @routines
         }
         else {
-            $!routines = my @routines is default(Nil);
+            my @routines is default(Nil);
             for $!db.query('SELECT * FROM routines').arrays -> @attributes {
                 my $routine := MoarVM::Profile::Routine.new(self, @attributes);
                 @routines[$routine.id] := $routine;
             }
-            @routines
+            $!routines := @routines.List
         }
     }
 
@@ -254,7 +266,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
             @overviews
         }
         else {
-            $!routine-overviews := my @overviews is default(Nil);
+            my @overviews is default(Nil);
             for $!db.query(q:to/QUERY/).arrays -> @values {
 SELECT
   c.routine_id,
@@ -274,7 +286,7 @@ QUERY
                 my $overview := MoarVM::Profile::RoutineOverview.new(@values);
                 @overviews[$overview.id] := $overview;
             }
-            @overviews
+            $!routine-overviews := @overviews.List
         }
     }
 
@@ -283,7 +295,7 @@ QUERY
             @overviews
         }
         else {
-            $!spesh-overviews := my @overviews is default(Nil);
+            my @overviews is default(Nil);
             for $!db.query(q:to/QUERY/).arrays -> @values {
 SELECT
   c.routine_id,
@@ -302,14 +314,14 @@ QUERY
                 my $overview := MoarVM::Profile::SpeshOverview.new(@values);
                 @overviews[$overview.id] := $overview;
             }
-            @overviews
+            $!spesh-overviews := @overviews.List
         }
     }
 }
 
 #say MoarVM::Profile::Routine.new( (0,"","",-1) );
 #my $profile := MoarVM::Profile.new("foo.db");
-#.say for $profile.types;
+#.say for $profile.routines.grep(*.is-user);
 #.say for $profile.spesh-overviews;
 
 # vim: expandtab shiftwidth=4
