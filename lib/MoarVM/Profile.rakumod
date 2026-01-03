@@ -34,6 +34,9 @@ my role DefaultParts {
     my $columns := $?CLASS.method-names.join(",").trans("-" => "_");
     method columns(::?CLASS:) { $columns }
 
+    my $select := "SELECT $columns FROM $_" with $?CLASS.table;
+    method select(::?CLASS:) { $select // Nil }
+
     my int $index;
     for $?CLASS.method-names -> $name {
         my int $actual = $index++;
@@ -57,7 +60,8 @@ my role DefaultParts {
 # );
 
 class MoarVM::Profile::Allocation does DefaultParts {
-    method method-names() {
+    method table(--> 'allocations') { }
+    method method-names() is implementation-detail {
         BEGIN <call-id type-id spesh jit count replaced>
     }
 }
@@ -74,7 +78,8 @@ class MoarVM::Profile::Allocation does DefaultParts {
 # );
 
 class MoarVM::Profile::Overview does DefaultParts {
-    method method-names() {
+    method table(--> 'profile') { }
+    method method-names() is implementation-detail {
         BEGIN <
           total-time spesh-time thread-id parent-thread-id
           root-node first-entry-time
@@ -100,11 +105,15 @@ class MoarVM::Profile::Type {
         ))
     }
 
-    method method-names() {
+    method table(--> 'types') { }
+    method method-names() is implementation-detail {
         BEGIN <id name extra-info type-links>
     }
     method columns() {
         BEGIN $?CLASS.method-names.join(",").trans("-" => "_")
+    }
+    method select() {
+        BEGIN "SELECT " ~ $?CLASS.columns ~ " FROM " ~ $?CLASS.table
     }
 
     method id(  MoarVM::Profile::Type:D:) {        @!parts[0]  }
@@ -122,17 +131,79 @@ class MoarVM::Profile::Type {
     }
 
     method allocations(MoarVM::Profile::Type:D:) {
-        with $!allocations -> @allocations {
-            @allocations
-        }
-        else {
+        $!allocations // do {
             my constant $query = "SELECT "
               ~ MoarVM::Profile::Allocation.columns
-              ~ " FROM allocations WHERE type_id = ?";
+              ~ " FROM "
+              ~ MoarVM::Profile::Allocation.table
+              ~ " WHERE type_id = ?";
 
             $!allocations := $!profile.db.query($query, self.id).arrays.map({
                 MoarVM::Profile::Routine.new(self, $_)
             }).List
+        }
+    }
+}
+
+#- Call ------------------------------------------------------------------------
+# CREATE TABLE calls(
+#  id INTEGER PRIMARY KEY ASC,
+#  parent_id INT,
+#  routine_id INT,
+#  osr INT,
+#  spesh_entries INT,
+#  jit_entries INT,
+#  inlined_entries INT,
+#  inclusive_time INT,
+#  exclusive_time INT,
+#  entries INT,
+#  deopt_one INT,
+#  deopt_all INT,
+#  rec_depth INT,
+#  first_entry_time INT,
+#  highest_child_id INT,
+#  FOREIGN KEY(routine_id) REFERENCES routines(id)
+# );
+
+class MoarVM::Profile::Call does DefaultParts {
+    has $!profile;
+    has $!allocations;
+    has $!ancestry;
+
+    multi method new(MoarVM::Profile::Call: $profile, @a) {
+        self.bless(:$profile, :parts(my int @parts = @a.map(*.Int)))
+    }
+
+    method table(--> 'calls') { }
+    method method-names() is implementation-detail {
+        BEGIN <
+          id parent-id routine-id osr spesh-entries inlined-entries
+          inclusive-time exclusive-time entries deopt-one deopt-all
+          rec-depth first-entry-time highest-child-id
+        >
+    }
+
+    method allocations(MoarVM::Profile::Call:D:) {
+        $!allocations // do {
+            my int $id = self.id;
+            $!allocations := $!profile.allocations.grep(*.call-id == $id).List
+        }
+    }
+
+    method parent(MoarVM::Profile::Call:D:) {
+        $!profile.calls[self.parent-id] // Nil
+    }
+
+    method ancestry(MoarVM::Profile::Call:D:) {
+        $!ancestry // do {
+            my @parents;
+            my @calls := $!profile.calls;
+            my $call   = self;
+            while @calls[$call.parent-id] -> $parent {
+                @parents.unshift($parent);
+                $call = $parent;
+            }
+            $!ancestry := @parents.List
         }
     }
 }
@@ -146,8 +217,9 @@ class MoarVM::Profile::Type {
 # );
 
 class MoarVM::Profile::Routine {
+    has int @!parts is built(:bind);
     has     $.profile;
-    has int @.parts is built(:bind);
+    has     $!calls;
 
     multi method new(MoarVM::Profile::Routine: $profile, @a) {
         self.bless(:$profile, :parts(
@@ -156,11 +228,15 @@ class MoarVM::Profile::Routine {
         ))
     }
 
-    method method-names() {
+    method table(--> 'routines') { }
+    method method-names() is implementation-detail {
         BEGIN <id name line file>
     }
     method columns() {
         BEGIN $?CLASS.method-names.join(",").trans("-" => "_")
+    }
+    method select() is implementation-detail {
+        BEGIN "SELECT " ~ $?CLASS.columns ~ " FROM " ~ $?CLASS.table
     }
 
     method id(        MoarVM::Profile::Routine:D:) { @!parts[0] }
@@ -199,56 +275,11 @@ class MoarVM::Profile::Routine {
     method spesh(MoarVM::Profile::Routine:D:) {
         $!profile.spesh-overviews[$.id] // Nil
     }
-}
 
-#- Call ------------------------------------------------------------------------
-# CREATE TABLE calls(
-#  id INTEGER PRIMARY KEY ASC,
-#  parent_id INT,
-#  routine_id INT,
-#  osr INT,
-#  spesh_entries INT,
-#  jit_entries INT,
-#  inlined_entries INT,
-#  inclusive_time INT,
-#  exclusive_time INT,
-#  entries INT,
-#  deopt_one INT,
-#  deopt_all INT,
-#  rec_depth INT,
-#  first_entry_time INT,
-#  highest_child_id INT,
-#  FOREIGN KEY(routine_id) REFERENCES routines(id)
-# );
-
-class MoarVM::Profile::Call does DefaultParts {
-    has $!profile;
-    has $!allocations;
-
-    multi method new(MoarVM::Profile::Call: $profile, @a) {
-        self.bless(:$profile, :parts(my int @parts = @a.map(*.Int)))
-    }
-
-    method method-names() {
-        BEGIN <
-          id parent-id routine-id osr spesh-entries inlined-entries
-          inclusive-time exclusive-time entries deopt-one deopt-all
-          rec-depth first-entry-time highest-child-id
-        >
-    }
-
-    method allocations(MoarVM::Profile::Call:D:) {
-        with $!allocations -> @allocations {
-            @allocations
-        }
-        else {
-            my constant $query = "SELECT "
-              ~ MoarVM::Profile::Allocation.columns
-              ~ " FROM allocations WHERE call_id = ?";
-
-            $!allocations := $!profile.db.query($query, self.id).arrays.map({
-                MoarVM::Profile::Routine.new(self, $_)
-            }).List
+    method calls(MoarVM::Profile::Routine:D:) {
+        $!calls // do {
+            my int $id = self.id;
+            $!calls := $!profile.calls.grep(*.routine-id == $id).List
         }
     }
 }
@@ -270,7 +301,8 @@ class MoarVM::Profile::Call does DefaultParts {
 # );
 
 class MoarVM::Profile::GC does DefaultParts {
-    method method-names() {
+    method table(--> 'gcs') { }
+    method method-names() is implementation-detail {
         BEGIN <
           time retained-bytes promoted-bytes gen2-roots stolen-gen2-roots
           full responsible cleared-bytes start-time sequence-num thread-id
@@ -291,7 +323,8 @@ class MoarVM::Profile::GC does DefaultParts {
 #  FOREIGN KEY(type_id) REFERENCES types(id)
 # );
 class MoarVM::Profile::Deallocation does DefaultParts {
-    method method-names() {
+    method table(--> 'deallocations') { }
+    method method-names() is implementation-detail {
         BEGIN <
           gc-seq-num gc-thread-id type-id nursery-fresh nursery-seen gen2
         >
@@ -315,7 +348,8 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 #  GROUP BY c.routine_id
 
 class MoarVM::Profile::RoutineOverview does DefaultParts {
-    method method-names() {
+    method table(--> Nil) { }
+    method method-names() is implementation-detail {
         BEGIN <
           id entries inclusive-time exclusive-time spesh-entries jit-entries
           inlined-entries osr deopt-one deopt-all site-count
@@ -339,7 +373,8 @@ class MoarVM::Profile::RoutineOverview does DefaultParts {
 #  GROUP BY c.routine_id
 
 class MoarVM::Profile::SpeshOverview does DefaultParts {
-    method method-names() {
+    method table(--> Nil) { }
+    method method-names() is implementation-detail {
         BEGIN <
           id deopt-one deopt-all osr entries inlined-entries spesh-entries
           jit-entries sites
@@ -407,47 +442,50 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
         self.bless(:$db)
     }
 
-    method types(MoarVM::Profile:D:) {
-        with $!types -> @types {
-            @types
-        }
-        else {
-            my constant $query = "SELECT "
-              ~ MoarVM::Profile::Type.method-names.join(",").trans("-" => "_")
-              ~ " FROM types";
+    method query(MoarVM::Profile:D: Str:D $query, |c) {
+        $!db.query($query, |c)
+    }
 
-            my @types is default(Nil);
-            for $!db.query($query).arrays -> @attributes {
-                my $type := MoarVM::Profile::Type.new(self, @attributes);
-                @types[$type.id] := $type;
+    method calls(MoarVM::Profile:D:) {
+        $!calls // do {
+            my @calls is default(Nil);
+            for $!db.query(MoarVM::Profile::Call.select).arrays {
+                my $call := MoarVM::Profile::Call.new(self, $_);
+                @calls[$call.id] := $call;
             }
-            $!types := @types.List
+            $!calls := @calls.List
+        }
+    }
+
+    method deallocations(MoarVM::Profile:D:) {
+        $!deallocations // do {
+            $!deallocations := $!db.query(MoarVM::Profile::Deallocation.select).arrays.map({
+                MoarVM::Profile::Deallocation.new(self, $_)
+            }).List
+        }
+    }
+
+    method gcs(MoarVM::Profile:D:) {
+        $!gcs // do {
+            $!routines := $!db.query(MoarVM::Profile::GC.select).arrays.map({
+                MoarVM::Profile::GC.new(self, $_)
+            }).List
         }
     }
 
     method routines(MoarVM::Profile:D:) {
-        with $!routines -> @routines {
-            @routines
-        }
-        else {
-            my constant $query = "SELECT "
-              ~ MoarVM::Profile::Routine.method-names.join(",").trans("-" => "_")
-              ~ " FROM routines";
-
+        $!routines // do {
             my @routines is default(Nil);
-            for $!db.query($query).arrays -> @attributes {
-                my $routine := MoarVM::Profile::Routine.new(self, @attributes);
+            for $!db.query(MoarVM::Profile::Routine.select).arrays {
+                my $routine := MoarVM::Profile::Routine.new(self, $_);
                 @routines[$routine.id] := $routine;
             }
             $!routines := @routines.List
         }
     }
 
-    method routine-overviews(MoarVM::Profile:D:) {
-        with $!routine-overviews -> @overviews {
-            @overviews
-        }
-        else {
+    method routine-overviews(MoarVM::Profile:D:) is implementation-detail {
+        $!routine-overviews // do {
             my @overviews is default(Nil);
             for $!db.query(q:to/QUERY/).arrays -> @values {
 SELECT
@@ -472,11 +510,8 @@ QUERY
         }
     }
 
-    method spesh-overviews(MoarVM::Profile:D:) {
-        with $!spesh-overviews -> @overviews {
-            @overviews
-        }
-        else {
+    method spesh-overviews(MoarVM::Profile:D:) is implementation-detail {
+        $!spesh-overviews // do {
             my @overviews is default(Nil);
             for $!db.query(q:to/QUERY/).arrays -> @values {
 SELECT
@@ -500,49 +535,14 @@ QUERY
         }
     }
 
-    method calls(MoarVM::Profile:D:) {
-        with $!calls -> @calls {
-            @calls
-        }
-        else {
-            my constant $query = "SELECT "
-              ~ MoarVM::Profile::Call.columns
-              ~ " FROM calls";
-
-            my @calls is default(Nil);
-            for $!db.query($query).arrays -> @attributes {
-                my $call := MoarVM::Profile::Call.new(self, @attributes);
-                @calls[$call.id] := $call;
+    method types(MoarVM::Profile:D:) {
+        $!types // do {
+            my @types is default(Nil);
+            for $!db.query(MoarVM::Profile::Type.select).arrays {
+                my $type := MoarVM::Profile::Type.new(self, $_);
+                @types[$type.id] := $type;
             }
-            $!calls := @calls.List
-        }
-    }
-
-    method gcs(MoarVM::Profile:D:) {
-        with $!gcs -> @gcs {
-            @gcs
-        }
-        else {
-            my constant $query = "SELECT "
-              ~ MoarVM::Profile::GC.columns
-              ~ " FROM gcs";
-            $!routines := $!db.query($query).arrays.map({
-                MoarVM::Profile::GC.new(self, $_)
-            }).List
-        }
-    }
-
-    method deallocations(MoarVM::Profile:D:) {
-        with $!deallocations -> @deallocations {
-            @deallocations
-        }
-        else {
-            my constant $query = "SELECT "
-              ~ MoarVM::Profile::Deallocation.columns
-              ~ " FROM deallocations";
-            $!deallocations := $!db.query($query).arrays.map({
-                MoarVM::Profile::Deallocation.new(self, $_)
-            }).List
+            $!types := @types.List
         }
     }
 }
@@ -550,10 +550,10 @@ QUERY
 #say MoarVM::Profile::Routine.new( (0,"","",-1) );
 #my $profile := MoarVM::Profile.new("bar", :create, :rerun);
 #my $profile := MoarVM::Profile.new(q/sub baz($a) { $a * $a }; baz($_) for ^10/);
-#.say for $profile.deallocations;
+#.say for $profile.gcs;
 #for $profile.routines.grep(*.is-user) {
 #    say $_;
-#    say .overview.gist.indent(2);
+#    say .calls.gist.indent(2);
 #}
 #.say for $profile.spesh-overviews;
 

@@ -28,13 +28,13 @@ also for ad-hoc profiling situations and benchmarking.
 The main class provided by this distribution is the C<MoarVM::Profile>
 class.  Instantiation happens with the C<.new> method, which may take:
 
-=head2 string with code to be executed
+=head3 string with code to be executed
 
 Creates the C<MoarVM::Profile> object with the profile information
 resulting from executing the given code, without creating a permanent
 SQLite database file.
 
-=head2 path to script to execute
+=head3 path to script to execute
 
 Creates the C<MoarVM::Profile> object with the profile information
 resulting from executing the code in the given path.  If the named
@@ -45,27 +45,54 @@ If there is already a SQLite database with the ".db" extension,
 then that will be used, unless the C<:rerun> named argument is
 specified with a true value.
 
-=head2 path to pre-generated file with SQL statements (extension: .sql)
+=head3 path to pre-generated file with SQL statements (extension: .sql)
 
 Creates the C<MoarVM::Profile> object from the pre-generated SQL
 in the given path.  If the named argument C<:create> is specified with
 a true value, a permanent SQLite database file will be created with
 the ".db" extension.
 
-=item path to pre-generated database file (extension: .db)
+=head3 path to pre-generated database file (extension: .db)
 
 Creates the C<MoarVM::Profile> object from the given SQLite database.
 
 =head2 Methods
 
-=head3 types
+=head3 calls
 
-Returns a C<List> of C<MoarVM::Profile::Type> objects, where the index
+Returns a C<List> of C<MoarVM::Profile::Call> objects, where the index
 of the object is the same as the C<.id> of the object.
 
 =begin code :lang<raku>
-my $type := $profile.types[$type-id];
+my $call := $profile.calls[$call-id];
 =end code
+
+=head3 db
+
+The C<DB::SQLite> database handle connected to the database associated
+with the profile.
+
+=head3 deallocations
+
+Returns a C<List> of C<MoarVM::Profile::Deallocation> objects, one for
+each deallocation having been done.
+
+=begin code :lang<raku>
+.say for $profile.deallocations;
+=end code
+
+=head3 gcs
+
+Returns a C<List> of C<MoarVM::Profile::GC> objects, one for each
+garbage collection run having been done.
+
+=begin code :lang<raku>
+.say for $profile.gcs;
+=end code
+
+=head3 query
+
+Perform a SQL query on the database associated with the profile.
 
 =head3 routines
 
@@ -76,12 +103,52 @@ of the object is the same as the C<.id> of the object.
 my $routine := $profile.routine[$routine-id];
 =end code
 
-=head1 MoarVM::Type
+=head3 types
 
-The C<MoarVM::Type> object encapsulates the information about a type
-(class) that has been accessed at least once.
+Returns a C<List> of C<MoarVM::Profile::Type> objects, where the index
+of the object is the same as the C<.id> of the object.
+
+=begin code :lang<raku>
+my $type := $profile.types[$type-id];
+=end code
+
+=head1 SUBTYPES
+
+This distribution provides a number of C<MoarVM::Profile::xxx> subtypes
+who share a number of methods.
 
 =head2 Methods
+
+=head3 columns
+
+String with all columns concatenated of associated table, or C<Nil>
+if the class works on a compound SQL statement.
+
+=head3 select
+
+String with a SQL statement to select all columns of the associated
+table, or C<Nil> if the class works on a compound SQL statement.
+
+=head3
+
+String with the name of the associated table, or C<Nil> if the class
+works on a compound SQL statement.
+
+=head1 MoarVM::Profile::Type
+
+The C<MoarVM::Type> object encapsulates the information about a type
+(class, enum, subset) that has been accessed at least once.
+
+=head2 Methods
+
+=head3 allocations
+
+Returns a C<List> with C<MoarVM::Profile::Allocation> objects for this
+type.
+
+=head3 extra-info
+
+A C<Map> with extra information about this type.
 
 =head3 id
 
@@ -91,15 +158,11 @@ The numerical ID of the type in this profile.
 
 The name of the this type.
 
-=head3 extra-info
-
-A C<Map> with extra information about this type.
-
 =head3 type-links
 
 A C<Map> with extra information about this links to other types.
 
-=head1 MoarVM::Routine
+=head1 MoarVM::Profile::Routine
 
 The C<MoarVM::Routine> object encapsulates the information about a block
 that has been executed at least once.  A such, the name "Routine" is a bit
@@ -116,22 +179,16 @@ and as such not documented.
 
 The numerical ID of the C<Callable> in this profile.
 
-=head3 name
+=head3 calls
 
-The name of the C<Callable>, "(block)" if there is no name, implying this
-is some type of non-C<Routine> C<Callable>.
+Returns a C<List> of C<MoarVM::Profile::Call> objects for each call from
+a different location made to this C<Callable>.
 
 =head3 file
 
 The file in which the C<Callable> has been defined.  Note this can have
 special path indicators such as "SETTING::" and "NQP::", so there's no
 direct path to an actual file.
-
-=head3 line
-
-The line number in which the C<Callable> has been defined (if available).
-B<-1> if no line number could be obtained (which is typical of some low
-level code blocks).
 
 =head3 is-block
 
@@ -144,6 +201,17 @@ Returns C<True> if the C<Callable> is part of the Rakudo core.
 =head3 is-user
 
 Returns C<True> if the C<Callable> is user-supplied code.
+
+=head3 line
+
+The line number in which the C<Callable> has been defined (if available).
+B<-1> if no line number could be obtained (which is typical of some low
+level code blocks).
+
+=head3 name
+
+The name of the C<Callable>, "(block)" if there is no name, implying this
+is some type of non-C<Routine> C<Callable>.
 
 =head3 overview
 
@@ -162,17 +230,17 @@ C<MoarVM::Profile::Routine> object.
 
 =head2 Methods
 
-=item id - ID of the associated M:P:Routine object
-=item entries
-=item inclusive-time
-=item exclusive-time
-=item spesh-entries
-=item jit-entries
-=item inlined-entries
-=item osr
-=item deopt-one
 =item deopt-all
+=item deopt-one
+=item entries
+=item exclusive-time
+=item id - ID of the associated M:P:Routine object
+=item inclusive-time
+=item inlined-entries
+=item jit-entries
+=item osr
 =item site-count
+=item spesh-entries
 
 =head1 MoarVM::Profile::SpeshOverview
 
@@ -181,15 +249,15 @@ C<MoarVM::Profile::Routine> object.
 
 =head2 Methods
 
-=item id - ID of the associated M:P:Routine object
-=item deopt-one
 =item deopt-all
-=item osr
+=item deopt-one
 =item entries
+=item id - ID of the associated M:P:Routine object
 =item inlined-entries
-=item spesh-entries
 =item jit-entries
+=item osr
 =item sites
+=item spesh-entries
 
 =head1 MoarVM::Profile::Call
 
@@ -198,21 +266,39 @@ C<MoarVM::Profile::Routine>.
 
 =head2 Methods
 
-=item id
-=item parent-id
-=item routine-id
-=item osr
-=item spesh-entries
-=item jit-entries
-=item inlined-entries
-=item inclusive-time
+=item deopt-all
+=item deopt-one
 =item exclusive-time
 =item entries
-=item deopt-one
-=item deopt-all
-=item rec-depth
 =item first-entry-time
 =item highest-child-id
+=item id
+=item inclusive-time
+=item inlined-entries
+=item jit-entries
+=item osr
+=item rec-depth
+=item routine-id
+=item spesh-entries
+
+=head3 allocations
+
+Returns a C<List> with C<MoarVM::Profile::Allocation> objects for this
+routine.
+
+=head3 ancestry
+
+Returns a C<List> with C<MoarVM::Profile::Call> objects of the parents
+of this call.
+
+=head3 parent
+
+Returns the C<MoarVM::Profile::Call> object of the parent of this call,
+or C<Nil> if no parent could be found.
+
+=head3 parent-id
+
+Returns the C<id> of the parent of this call.
 
 =head1 MoarVM::Profile::Allocation
 
@@ -222,11 +308,11 @@ C<MoarVM::Profile::Call> and a given C<MoarVM::Profile::Type>.
 =head2 Methods
 
 =item call-id - ID of the associated M:P:Call object
-=item type-id - ID of the associated M:P:Type object
-=item spesh
-=item jit
 =item count
+=item jit
 =item replaced
+=item spesh
+=item type-id - ID of the associated M:P:Type object
 
 =head1 MoarVM::Profile::Overview
 
@@ -234,12 +320,12 @@ An object containing overview information about this profile.
 
 =head2 Methods
 
-=item total-time
-=item spesh-time
-=item thread-id
+=item first-entry-time
 =item parent-thread-id
 =item root-node
-=item first-entry-time
+=item spesh-time
+=item thread-id
+=item total-time
 
 =head1 MoarVM::Profile::GC
 
@@ -247,17 +333,17 @@ An object containing information about a garbage collection run.
 
 =head2 Methods
 
-=item time
-=item retained-bytes
-=item promoted-bytes
-=item gen2-roots
-=item stolen-gen2-roots
-=item full
-=item responsible
 =item cleared-bytes
-=item start-time
+=item full
+=item gen2-roots
+=item promoted-bytes
+=item responsible
+=item retained-bytes
 =item sequence-num
+=item start-time
+=item stolen-gen2-roots
 =item thread-id
+=item time
 
 =head1 MoarVM::Profile::Deallocation
 
@@ -269,10 +355,10 @@ collection, and the type being garbage collected.
 
 =item gc-seq-num
 =item gc-thread-id
-=item type-id
+=item gen2
 =item nursery-fresh
 =item nursery-seen
-=item gen2
+=item type-id
 
 =head1 CREDITS
 
