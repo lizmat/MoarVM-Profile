@@ -132,6 +132,12 @@ my $type := $profile.types[$type-id];
 This distribution provides a number of C<MoarVM::Profile::xxx> subtypes
 who share a number of methods.
 
+Most methods return a native C<int>: some obviously do not, such as
+C<.name> and C<.file> methods, which return a native C<str>.
+
+Methods that indicate a start / end time or interval, are in B<nano>
+seconds.
+
 =head2 Methods
 
 =head3 columns
@@ -156,12 +162,18 @@ C<MoarVM::Profile::Call> and a given C<MoarVM::Profile::Type>.
 
 =head2 Methods
 
-=item call-id - ID of the associated M:P:Call object
 =item count
 =item jit
 =item replaced
 =item spesh
-=item type-id - ID of the associated M:P:Type object
+
+=head3 call-id
+
+ID of the associated C<MoarVM::Profile::Call> object.
+
+=head3 type-id
+
+ID of the associated C<MoarVM::Profile::Type> object.
 
 =head1 MoarVM::Profile::Call
 
@@ -172,17 +184,12 @@ C<MoarVM::Profile::Routine>.
 
 =item deopt-all
 =item deopt-one
-=item exclusive-time
 =item entries
-=item first-entry-time
 =item highest-child-id
-=item id
-=item inclusive-time
 =item inlined-entries
 =item jit-entries
 =item osr
 =item rec-depth
-=item routine-id
 =item spesh-entries
 
 =head3 allocations
@@ -195,6 +202,24 @@ routine.
 Returns a C<List> with C<MoarVM::Profile::Call> objects of the parents
 of this call.
 
+=head3 first-entry-time
+
+The time this call was first made.
+
+=head3 exclusive-time
+
+The number of nano seconds spent in the routine called B<without>
+including the time spent in any calls made inside that routine.
+
+=head3 id
+
+The ID of this call.
+
+=head3 inclusive-time
+
+The number of nano seconds spent in the routine called 
+B<including> the time spent in any calls made inside that routine.
+
 =head3 parent
 
 Returns the C<MoarVM::Profile::Call> object of the parent of this call,
@@ -203,6 +228,10 @@ or C<Nil> if no parent could be found.
 =head3 parent-id
 
 Returns the C<id> of the parent of this call.
+
+=head3 routine-id
+
+The ID of the C<MoarVM::Profile::Routine> object that was called.
 
 =head1 MoarVM::Profile::CallsOverview
 
@@ -231,7 +260,10 @@ collection, and the type being garbage collected.
 =item gen2
 =item nursery-fresh
 =item nursery-seen
-=item type-id
+
+=head3 type-id
+
+The ID of the C<MoarVM::Profile::Type> object that was deallocated.
 
 =head1 MoarVM::Profile::GC
 
@@ -246,10 +278,19 @@ An object containing information about a garbage collection run.
 =item responsible
 =item retained-bytes
 =item sequence-num
-=item start-time
 =item stolen-gen2-roots
-=item thread-id
-=item time
+
+=head3 start-time
+
+The time this garbage collection was started.
+
+=head3 thread-id
+
+The ID of the thread doing the garbage collection.
+
+=head3 time
+
+The time used to perform the garbage collection.
 
 =head1 MoarVM::Profile::GCOverview
 
@@ -258,14 +299,45 @@ done in this profile.
 
 =head2 methods
 
-=item avg-major-time
-=item avg-minor-time
-=item max-major-time
-=item max-minor-time
-=item min-major-time
-=item min-minor-time
-=item total-major
-=item total-minor
+=head3 avg-major-time
+
+The average time spent on a full garbage collection (B<0> if none
+were done).
+
+=head3 avg-minor-time
+
+The average time spent on a partial garbage collection (B<0> if none
+were done).
+
+=head3 max-major-time
+
+The maximum time spent on a full garbage collection (B<0> if none
+were done).
+
+=head3 max-minor-time
+
+The maximum time spent on a partial garbage collection (B<0> if none
+were done).
+
+=head3 min-major-time
+
+The minumum time spent on a full garbage collection (B<0> if none
+were done).
+
+=head3 min-minor-time
+
+The minumum time spent on a partial garbage collection (B<0> if none
+were done).
+
+=head3 total-major
+
+The total time spent on full garbage collections (B<0> if none were
+done).
+
+=head3 total-minor
+
+The total time spent on partial garbage collections (B<0> if none were
+done).
 
 =head1 MoarVM::Profile::Overview
 
@@ -278,7 +350,10 @@ An object containing overview information about this profile.
 =item root-node
 =item spesh-time
 =item thread-id
-=item total-time
+
+=head3 total-time
+
+Total execution time for the program that created this profile.
 
 =head1 MoarVM::Profile::Routine
 
@@ -351,14 +426,24 @@ C<MoarVM::Profile::Routine> object.
 =item deopt-all
 =item deopt-one
 =item entries
-=item exclusive-time
-=item id - ID of the associated M:P:Routine object
-=item inclusive-time
 =item inlined-entries
 =item jit-entries
 =item osr
 =item site-count
 =item spesh-entries
+
+=head3 exclusive-time
+
+The time spent in execution of this C<Callable> alone.
+
+=head3 id
+
+The ID of the associated C<MoarVM::Profile::Routine> object.
+
+=head3 inclusive-time
+
+The time spent in execution of this C<Callable>, including time spent
+in any calls that were made in this C<Callable>.
 
 =head1 MoarVM::Profile::SpeshOverview
 
@@ -370,12 +455,15 @@ C<MoarVM::Profile::Routine> object.
 =item deopt-all
 =item deopt-one
 =item entries
-=item id - ID of the associated M:P:Routine object
 =item inlined-entries
 =item jit-entries
 =item osr
 =item sites
 =item spesh-entries
+
+=head3 id
+
+The ID of the associated C<MoarVM::Profile::Routine> object.
 
 =head1 MoarVM::Profile::Type
 

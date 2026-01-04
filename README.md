@@ -115,6 +115,10 @@ SUBTYPES
 
 This distribution provides a number of `MoarVM::Profile::xxx` subtypes who share a number of methods.
 
+Most methods return a native `int`: some obviously do not, such as `.name` and `.file` methods, which return a native `str`.
+
+Methods that indicate a start / end time or interval, are in **nano** seconds.
+
 Methods
 -------
 
@@ -138,8 +142,6 @@ An object containing allocation information about a given `MoarVM::Profile::Call
 Methods
 -------
 
-  * call-id - ID of the associated M:P:Call object
-
   * count
 
   * jit
@@ -148,7 +150,13 @@ Methods
 
   * spesh
 
-  * type-id - ID of the associated M:P:Type object
+### call-id
+
+ID of the associated `MoarVM::Profile::Call` object.
+
+### type-id
+
+ID of the associated `MoarVM::Profile::Type` object.
 
 MoarVM::Profile::Call
 =====================
@@ -162,17 +170,9 @@ Methods
 
   * deopt-one
 
-  * exclusive-time
-
   * entries
 
-  * first-entry-time
-
   * highest-child-id
-
-  * id
-
-  * inclusive-time
 
   * inlined-entries
 
@@ -181,8 +181,6 @@ Methods
   * osr
 
   * rec-depth
-
-  * routine-id
 
   * spesh-entries
 
@@ -194,6 +192,22 @@ Returns a `List` with `MoarVM::Profile::Allocation` objects for this routine.
 
 Returns a `List` with `MoarVM::Profile::Call` objects of the parents of this call.
 
+### first-entry-time
+
+The time this call was first made.
+
+### exclusive-time
+
+The number of nano seconds spent in the routine called **without** including the time spent in any calls made inside that routine.
+
+### id
+
+The ID of this call.
+
+### inclusive-time
+
+The number of nano seconds spent in the routine called **including** the time spent in any calls made inside that routine.
+
 ### parent
 
 Returns the `MoarVM::Profile::Call` object of the parent of this call, or `Nil` if no parent could be found.
@@ -201,6 +215,10 @@ Returns the `MoarVM::Profile::Call` object of the parent of this call, or `Nil` 
 ### parent-id
 
 Returns the `id` of the parent of this call.
+
+### routine-id
+
+The ID of the `MoarVM::Profile::Routine` object that was called.
 
 MoarVM::Profile::CallsOverview
 ==============================
@@ -242,7 +260,9 @@ Methods
 
   * nursery-seen
 
-  * type-id
+### type-id
+
+The ID of the `MoarVM::Profile::Type` object that was deallocated.
 
 MoarVM::Profile::GC
 ===================
@@ -266,13 +286,19 @@ Methods
 
   * sequence-num
 
-  * start-time
-
   * stolen-gen2-roots
 
-  * thread-id
+### start-time
 
-  * time
+The time this garbage collection was started.
+
+### thread-id
+
+The ID of the thread doing the garbage collection.
+
+### time
+
+The time used to perform the garbage collection.
 
 MoarVM::Profile::GCOverview
 ===========================
@@ -282,21 +308,37 @@ An object containing overview information about garbage collections done in this
 methods
 -------
 
-  * avg-major-time
+### avg-major-time
 
-  * avg-minor-time
+The average time spent on a full garbage collection (**0** if none were done).
 
-  * max-major-time
+### avg-minor-time
 
-  * max-minor-time
+The average time spent on a partial garbage collection (**0** if none were done).
 
-  * min-major-time
+### max-major-time
 
-  * min-minor-time
+The maximum time spent on a full garbage collection (**0** if none were done).
 
-  * total-major
+### max-minor-time
 
-  * total-minor
+The maximum time spent on a partial garbage collection (**0** if none were done).
+
+### min-major-time
+
+The minumum time spent on a full garbage collection (**0** if none were done).
+
+### min-minor-time
+
+The minumum time spent on a partial garbage collection (**0** if none were done).
+
+### total-major
+
+The total time spent on full garbage collections (**0** if none were done).
+
+### total-minor
+
+The total time spent on partial garbage collections (**0** if none were done).
 
 MoarVM::Profile::Overview
 =========================
@@ -316,7 +358,9 @@ Methods
 
   * thread-id
 
-  * total-time
+### total-time
+
+Total execution time for the program that created this profile.
 
 MoarVM::Profile::Routine
 ========================
@@ -382,12 +426,6 @@ Methods
 
   * entries
 
-  * exclusive-time
-
-  * id - ID of the associated M:P:Routine object
-
-  * inclusive-time
-
   * inlined-entries
 
   * jit-entries
@@ -397,6 +435,18 @@ Methods
   * site-count
 
   * spesh-entries
+
+### exclusive-time
+
+The time spent in execution of this `Callable` alone.
+
+### id
+
+The ID of the associated `MoarVM::Profile::Routine` object.
+
+### inclusive-time
+
+The time spent in execution of this `Callable`, including time spent in any calls that were made in this `Callable`.
 
 MoarVM::Profile::SpeshOverview
 ==============================
@@ -412,8 +462,6 @@ Methods
 
   * entries
 
-  * id - ID of the associated M:P:Routine object
-
   * inlined-entries
 
   * jit-entries
@@ -423,6 +471,10 @@ Methods
   * sites
 
   * spesh-entries
+
+### id
+
+The ID of the associated `MoarVM::Profile::Routine` object.
 
 MoarVM::Profile::Type
 =====================
