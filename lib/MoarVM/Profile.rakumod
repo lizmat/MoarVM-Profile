@@ -5,7 +5,7 @@ use JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>;
 
 my str @names = "";
 my %names = "" => 0;
-my sub name2index(str $name) {
+my sub name2index(str $name --> int) {
     %names{$name} // do {
         my int $index = %names{$name} := @names.elems;
         @names.push($name);
@@ -13,7 +13,11 @@ my sub name2index(str $name) {
     }
 }
 
-my sub gist($self) {
+# Because we can't redispatch on a method in a role, the logic for gisting
+# is put here in a sub, so that it can get called inside the .gist methods
+# of the DefaultParts role, even with the .gist method shadowing the one
+# provided by the role.
+my sub gist($self --> Str:D) {
     my str @parts;
     for $self.method-names {
         if $self."$_"() -> $value {
@@ -31,7 +35,7 @@ my role DefaultParts {
         self.bless(:parts(my int @parts = @a.map({ .defined ?? .Int !! 0 })))
     }
 
-    multi method gist(::?CLASS:D:) { &gist(self) }
+    multi method gist(::?CLASS:D: --> Str:D) { &gist(self) }
 
     my $columns := $?CLASS.method-names.join(",").trans("-" => "_");
     method columns(::?CLASS:) { $columns }
@@ -39,11 +43,19 @@ my role DefaultParts {
     my $select := "SELECT $columns FROM $_;" with $?CLASS.table;
     method select(::?CLASS:) { $select // Nil }
 
+    # Add methods for each of the method names provided, each accessing
+    # the next element of the @!parts attribute, when the role is being
+    # consumed in the class (the mainline of the role is effectively the
+    # COMPOSE phaser)
     my int $index;
     for $?CLASS.method-names -> $name {
+
+        # Need to create a local copy of the value to be used as index
+        # otherwise they will all refer to the highest value seen
         my int $actual = $index++;
-        my $method := my method (::?CLASS:D:) { @!parts[$actual] }
-        $method.^set_name($name);
+
+        my $method := my method (::?CLASS:D: --> int) { @!parts[$actual] }
+        $method.^set_name($name);  # XXX why doesn't this work?
         $?CLASS.^add_method($name, $method);
     }
 }
@@ -118,7 +130,9 @@ class MoarVM::Profile::Type {
         BEGIN "SELECT " ~ $?CLASS.columns ~ " FROM " ~ $?CLASS.table
     }
 
-    method id(  MoarVM::Profile::Type:D:) {        @!parts[0]  }
+    method id(        MoarVM::Profile::Type:D: --> int) { @!parts[0] }
+    method name-index(MoarVM::Profile::Type:D: --> int) { @!parts[1] }
+
     method name(MoarVM::Profile::Type:D:) { @names[@!parts[1]] }
 
     method extra-info(MoarVM::Profile::Type:D:) {
@@ -128,11 +142,11 @@ class MoarVM::Profile::Type {
         ($_ := @!parts[3]) ~~ Str ?? ($_ = from-json($_).Map) !! $_
     }
 
-    multi method gist(MoarVM::Profile::Type:D:) {
+    multi method gist(MoarVM::Profile::Type:D: --> Str:D) {
         "$.id: $.name $.extra-info"
     }
 
-    method allocations(MoarVM::Profile::Type:D:) {
+    method allocations(MoarVM::Profile::Type:D: --> List:D) {
         $!allocations // do {
             my constant $query = "SELECT "
               ~ MoarVM::Profile::Allocation.columns
@@ -185,18 +199,18 @@ class MoarVM::Profile::Call does DefaultParts {
         >
     }
 
-    method allocations(MoarVM::Profile::Call:D:) {
+    method allocations(MoarVM::Profile::Call:D: --> List) {
         $!allocations // do {
             my int $id = self.id;
             $!allocations := $!profile.allocations.grep(*.call-id == $id).List
         }
     }
 
-    method parent(MoarVM::Profile::Call:D:) {
+    method parent(MoarVM::Profile::Call:D: --> MoarVM::Profile::Call:D) {
         $!profile.calls[self.parent-id] // Nil
     }
 
-    method ancestry(MoarVM::Profile::Call:D:) {
+    method ancestry(MoarVM::Profile::Call:D: --> List) {
         $!ancestry // do {
             my @parents;
             my @calls := $!profile.calls;
@@ -220,7 +234,7 @@ class MoarVM::Profile::CallsOverview does DefaultParts {
           osr-total
         >
     }
-    method select() { q:to/SQL/ }
+    method select(--> Str:D) { q:to/SQL/ }
 SELECT
   total(entries),
   total(spesh_entries),
@@ -269,7 +283,7 @@ class MoarVM::Profile::GCOverview does DefaultParts {
           total-minor total-major
         >
     }
-    method select() { q:to/SQL/ }
+    method select(--> Str:D) { q:to/SQL/ }
 SELECT
   AVG(  CASE WHEN full == 0 THEN latest_end - earliest END),
   MIN(  CASE WHEN full == 0 THEN latest_end - earliest END),
@@ -288,9 +302,62 @@ FROM gcs
   GROUP BY sequence_num
   ORDER BY sequence_num ASC)
 SQL
-    multi method gist(MoarVM::Profile::GCOverview:D:) {
+    multi method gist(MoarVM::Profile::GCOverview:D: --> Str:D) {
         self.total-minor ?? gist(self) !! "(no garbage collections done)"
     }
+}
+
+#- RoutineOverview -------------------------------------------------------------
+class MoarVM::Profile::RoutineOverview does DefaultParts {
+    method table(--> Nil) { }
+    method method-names() is implementation-detail {
+        BEGIN <
+          id entries inclusive-time exclusive-time spesh-entries jit-entries
+          inlined-entries osr deopt-one deopt-all site-count
+        >
+    }
+    method select(--> Str:D) { q:to/SQL/ }
+SELECT
+  c.routine_id,
+  TOTAL(entries),
+  TOTAL(case WHEN rec_depth = 0 THEN inclusive_time ELSE 0 END),
+  TOTAL(exclusive_time),
+  TOTAL(spesh_entries),
+  TOTAL(jit_entries),
+  TOTAL(inlined_entries),
+  TOTAL(osr),
+  TOTAL(deopt_one),
+  TOTAL(deopt_all),
+  COUNT(c.id)
+FROM calls c
+GROUP BY c.routine_id
+SQL
+}
+
+#- SpeshOverview ---------------------------------------------------------------
+class MoarVM::Profile::SpeshOverview does DefaultParts {
+    method table(--> Nil) { }
+    method method-names() is implementation-detail {
+        BEGIN <
+          id deopt-one deopt-all osr entries inlined-entries spesh-entries
+          jit-entries sites
+        >
+    }
+    method select(--> Str:D) { q:to/SQL/ }
+SELECT
+  c.routine_id,
+  TOTAL(c.deopt_one),
+  TOTAL(c.deopt_all),
+  TOTAL(c.osr),
+  TOTAL(c.entries),
+  TOTAL(c.inlined_entries),
+  TOTAL(c.spesh_entries),
+  TOTAL(c.jit_entries),
+  COUNT(c.id)
+FROM calls c
+WHERE c.deopt_one > 0 OR c.deopt_all > 0 OR c.osr > 0
+GROUP BY c.routine_id
+SQL
 }
 
 #- Routine ---------------------------------------------------------------------
@@ -324,12 +391,12 @@ class MoarVM::Profile::Routine {
         BEGIN "SELECT " ~ $?CLASS.columns ~ " FROM " ~ $?CLASS.table
     }
 
-    method id(        MoarVM::Profile::Routine:D:) { @!parts[0] }
-    method name-index(MoarVM::Profile::Routine:D:) { @!parts[1] }
-    method line(      MoarVM::Profile::Routine:D:) { @!parts[2] }
-    method file-index(MoarVM::Profile::Routine:D:) { @!parts[3] }
+    method id(        MoarVM::Profile::Routine:D: --> int) { @!parts[0] }
+    method name-index(MoarVM::Profile::Routine:D: --> int) { @!parts[1] }
+    method line(      MoarVM::Profile::Routine:D: --> int) { @!parts[2] }
+    method file-index(MoarVM::Profile::Routine:D: --> int) { @!parts[3] }
 
-    method name(MoarVM::Profile::Routine:D:) {
+    method name(MoarVM::Profile::Routine:D: --> str) {
         if @!parts[1] -> $index {
             @names[$index]
         }
@@ -337,31 +404,31 @@ class MoarVM::Profile::Routine {
             '(block)'
         }
     }
-    method file(MoarVM::Profile::Routine:D:) { @names[@!parts[3]] }
+    method file(MoarVM::Profile::Routine:D: --> str) { @names[@!parts[3]] }
 
-    method is-block(MoarVM::Profile::Routine:D:) { @!parts[1] == 0 }
+    method is-block(MoarVM::Profile::Routine:D: --> Bool:D) { @!parts[1] == 0 }
 
-    method is-core(MoarVM::Profile::Routine:D:) {
-        self.line < 0 || (self.file andthen .starts-with(
+    method is-core(MoarVM::Profile::Routine:D: --> Bool:D) {
+        (self.line < 0 || (self.file andthen .starts-with(
           'SETTING::' | 'NQP::' | 'src/Perl6' | 'src/vm/moar' | 'src/main.nqp'
-        ))
+        ))).Bool
     }
-    method is-user(MoarVM::Profile::Routine:D:) {
+    method is-user(MoarVM::Profile::Routine:D: --> Bool:D) {
         !self.is-core
     }
 
-    multi method gist(MoarVM::Profile::Routine:D:) {
+    multi method gist(MoarVM::Profile::Routine:D: --> Str:D) {
         "$.id: $.name ($.file:$.line)"
     }
 
-    method overview(MoarVM::Profile::Routine:D:) {
+    method overview(MoarVM::Profile::Routine:D: --> MoarVM::Profile::RoutineOverview:D) {
         $!profile.routine-overviews[$.id] // Nil
     }
-    method spesh(MoarVM::Profile::Routine:D:) {
+    method spesh(MoarVM::Profile::Routine:D: --> MoarVM::Profile::SpeshOverview) {
         $!profile.spesh-overviews[$.id] // Nil
     }
 
-    method calls(MoarVM::Profile::Routine:D:) {
+    method calls(MoarVM::Profile::Routine:D: --> List:D) {
         $!calls // do {
             my int $id = self.id;
             $!calls := $!profile.calls.grep(*.routine-id == $id).List
@@ -390,59 +457,6 @@ class MoarVM::Profile::Deallocation does DefaultParts {
     }
 }
 
-#- RoutineOverview -------------------------------------------------------------
-class MoarVM::Profile::RoutineOverview does DefaultParts {
-    method table(--> Nil) { }
-    method method-names() is implementation-detail {
-        BEGIN <
-          id entries inclusive-time exclusive-time spesh-entries jit-entries
-          inlined-entries osr deopt-one deopt-all site-count
-        >
-    }
-    method select() { q:to/SQL/ }
-SELECT
-  c.routine_id,
-  TOTAL(entries),
-  TOTAL(case WHEN rec_depth = 0 THEN inclusive_time ELSE 0 END),
-  TOTAL(exclusive_time),
-  TOTAL(spesh_entries),
-  TOTAL(jit_entries),
-  TOTAL(inlined_entries),
-  TOTAL(osr),
-  TOTAL(deopt_one),
-  TOTAL(deopt_all),
-  COUNT(c.id)
-FROM calls c
-GROUP BY c.routine_id
-SQL
-}
-
-#- SpeshOverview ---------------------------------------------------------------
-class MoarVM::Profile::SpeshOverview does DefaultParts {
-    method table(--> Nil) { }
-    method method-names() is implementation-detail {
-        BEGIN <
-          id deopt-one deopt-all osr entries inlined-entries spesh-entries
-          jit-entries sites
-        >
-    }
-    method select() { q:to/SQL/ }
-SELECT
-  c.routine_id,
-  TOTAL(c.deopt_one),
-  TOTAL(c.deopt_all),
-  TOTAL(c.osr),
-  TOTAL(c.entries),
-  TOTAL(c.inlined_entries),
-  TOTAL(c.spesh_entries),
-  TOTAL(c.jit_entries),
-  COUNT(c.id)
-FROM calls c
-WHERE c.deopt_one > 0 OR c.deopt_all > 0 OR c.osr > 0
-GROUP BY c.routine_id
-SQL
-}
-
 #- Profile ---------------------------------------------------------------------
 class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     has $.db;
@@ -455,6 +469,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     has $!routine-overviews;
     has $!spesh-overviews;
     has $!types;
+    has $!file-ids;
 
     proto method new(|) {*}
     multi method new(IO:D $io where .e && .extension eq 'db') {
@@ -513,11 +528,15 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     }
 
     method query(MoarVM::Profile:D: Str:D $query, |c) {
+        CATCH {
+            note $query.chomp;
+            .rethrow;
+        }
 #say $query;  # for debugging
         $!db.query($query, |c)
     }
 
-    method calls(MoarVM::Profile:D:) {
+    method calls(MoarVM::Profile:D: --> List:D) {
         $!calls // do {
             my @calls is default(Nil);
             for self.query(MoarVM::Profile::Call.select).arrays {
@@ -528,7 +547,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
         }
     }
 
-    method deallocations(MoarVM::Profile:D:) {
+    method deallocations(MoarVM::Profile:D: --> List:D) {
         $!deallocations // do {
             $!deallocations := self.query(MoarVM::Profile::Deallocation.select).arrays.map({
                 MoarVM::Profile::Deallocation.new(self, $_)
@@ -536,7 +555,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
         }
     }
 
-    method gcs(MoarVM::Profile:D:) {
+    method gcs(MoarVM::Profile:D: --> List:D) {
         $!gcs // do {
             $!gcs := self.query(MoarVM::Profile::GC.select).arrays.map({
                 MoarVM::Profile::GC.new($_)
@@ -544,14 +563,61 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
         }
     }
 
-    method gc-overview(MoarVM::Profile:D:) {
+    method gc-overview(MoarVM::Profile:D: --> MoarVM::Profile::GCOverview:D) {
         $!gc-overview
           // ($!gc-overview := MoarVM::Profile::GCOverview.new(
                self.query(MoarVM::Profile::GCOverview.select).array
              ))
     }
 
-    method routines(MoarVM::Profile:D:) {
+    method file-ids(MoarVM::Profile:D:) {
+        $!file-ids //
+          ($!file-ids := self.routines.map(*.file-index).unique.List)
+    }
+
+    method routines(MoarVM::Profile:D: --> List:D) {
+        if %_ {
+            my @routines := self.routines;
+            if %_<name> andthen %names{$_} -> int $name-index {
+                if %_<file> andthen %names{$_} -> int $file-index {
+                    if %_<line> -> int $line {
+                        return @routines.grep({
+                            .defined
+                              && .name-index == $name-index
+                              && .file-index == $file-index
+                              && .line       == $line
+                        }).List;
+                    }
+                    else {
+                        return @routines.grep({
+                            .defined
+                              && .name-index == $name-index
+                              && .file-index == $file-index
+                        }).List;
+                    }
+                }
+                else {
+                    return @routines.grep({
+                        .defined && .name-index == $name-index
+                    }).List;
+                }
+            }
+            if %_<file> andthen %names{$_} -> int $index {
+                if %_<line> -> int $line {
+                    return @routines.grep({
+                        .defined && .file-index == $index && .line == $line
+                    }).List;
+                }
+                else {
+                    return @routines.grep({
+                        .defined && .file-index == $index
+                    }).List;
+                }
+            }
+
+            return ();
+        }
+
         $!routines // do {
             my @routines is default(Nil);
             for self.query(MoarVM::Profile::Routine.select).arrays {
@@ -592,7 +658,19 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
         }
     }
 
-    method types(MoarVM::Profile:D:) {
+    method types(MoarVM::Profile:D: --> List:D) {
+        if %_ {
+            my @types := self.types;
+            if %_<name> andthen %names{$_} -> int $name-index {
+                return @types.grep({
+                    .defined && .name-index == $name-index
+                }).List
+            }
+            else {
+                return ();
+            }
+        }
+
         $!types // do {
             my @types is default(Nil);
             for self.query(MoarVM::Profile::Type.select).arrays {

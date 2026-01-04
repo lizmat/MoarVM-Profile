@@ -115,8 +115,21 @@ Returns a C<List> of C<MoarVM::Profile::Routine> objects, where the index
 of the object is the same as the C<.id> of the object.
 
 =begin code :lang<raku>
-my $routine := $profile.routine[$routine-id];
+my $routine := $profile.routines[$routine-id];
 =end code
+
+Optionally takes two named arguments:
+
+=item :name - the name to match exactly
+=item :file - the name of the file to match exactly
+=item :line - the line number in the file to match exactly
+
+=begin code :lang<raku>
+my @routines := $profile.routines(:name<foo>, :file<-e>);
+=end code
+
+Note that this also returns a C<List>, as multi subroutines /
+methods / tokens / rules / regex result in multiple matches.
 
 =head3 types
 
@@ -272,13 +285,19 @@ An object containing information about a garbage collection run.
 =head2 Methods
 
 =item cleared-bytes
-=item full
 =item gen2-roots
 =item promoted-bytes
 =item responsible
 =item retained-bytes
-=item sequence-num
 =item stolen-gen2-roots
+
+=head3 full
+
+B<1> if this was a full garbage collection, else B<0>.
+
+=head3 sequence-num
+
+Basically the ID of this garbage collection (starts at 1).
 
 =head3 start-time
 
@@ -425,12 +444,18 @@ C<MoarVM::Profile::Routine> object.
 
 =item deopt-all
 =item deopt-one
-=item entries
 =item inlined-entries
 =item jit-entries
 =item osr
-=item site-count
 =item spesh-entries
+
+=head3 entries
+
+The total number of times this C<Callable> was being called.
+
+=head3 site-count
+
+The number of places from which this C<Callable> was being called.
 
 =head3 exclusive-time
 

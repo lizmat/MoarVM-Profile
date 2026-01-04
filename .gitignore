@@ -2,6 +2,7 @@
 /MoarVM-Profile-*
 ?
 /releases/
+*.rakucov
 foo*
 bar*
 baz*

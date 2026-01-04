@@ -99,8 +99,22 @@ Perform a SQL query on the database associated with the profile.
 Returns a `List` of `MoarVM::Profile::Routine` objects, where the index of the object is the same as the `.id` of the object.
 
 ```raku
-my $routine := $profile.routine[$routine-id];
+my $routine := $profile.routines[$routine-id];
 ```
+
+Optionally takes two named arguments:
+
+  * :name - the name to match exactly
+
+  * :file - the name of the file to match exactly
+
+  * :line - the line number in the file to match exactly
+
+```raku
+my @routines := $profile.routines(:name<foo>, :file<-e>);
+```
+
+Note that this also returns a `List`, as multi subroutines / methods / tokens / rules / regex result in multiple matches.
 
 ### types
 
@@ -274,8 +288,6 @@ Methods
 
   * cleared-bytes
 
-  * full
-
   * gen2-roots
 
   * promoted-bytes
@@ -284,9 +296,15 @@ Methods
 
   * retained-bytes
 
-  * sequence-num
-
   * stolen-gen2-roots
+
+### full
+
+**1** if this was a full garbage collection, else **0**.
+
+### sequence-num
+
+Basically the ID of this garbage collection (starts at 1).
 
 ### start-time
 
@@ -424,17 +442,21 @@ Methods
 
   * deopt-one
 
-  * entries
-
   * inlined-entries
 
   * jit-entries
 
   * osr
 
-  * site-count
-
   * spesh-entries
+
+### entries
+
+The total number of times this `Callable` was being called.
+
+### site-count
+
+The number of places from which this `Callable` was being called.
 
 ### exclusive-time
 
