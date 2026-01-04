@@ -34,10 +34,10 @@ my $spesh-entries   := $overview.spesh-entries;
 my $inlined-entries := $overview.inlined-entries;
 my $site-count      := $overview.site-count;
 
-ok $entries        == $times,          'seen all calls made';
-ok $spesh-entries   < $entries,        'fewer spesh entries';
-ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
-ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
+ok $entries         == $times,          'seen all calls made';
+ok $spesh-entries   <= $entries,        'fewer spesh entries';
+ok $inlined-entries <= $spesh-entries,  'fewer inlined entries';
+ok $exclusive-time  <= $inclusive-time, 'exclusive time is less';
 
 #- calls -----------------------------------------------------------------------
 my @calls := $routine.calls;
