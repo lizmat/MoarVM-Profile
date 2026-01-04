@@ -36,7 +36,7 @@ my $site-count      := $overview.site-count;
 
 ok $entries        == $times,          'seen all calls made';
 ok $spesh-entries   < $entries,        'fewer spesh entries';
-todo("$inlined_entries < $spesh_entries");
+todo("$inlined-entries < $spesh-entries");
 ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
 ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
 
