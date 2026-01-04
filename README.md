@@ -34,13 +34,13 @@ Creates the `MoarVM::Profile` object with the profile information resulting from
 
 ### path to script to execute
 
-Creates the `MoarVM::Profile` object with the profile information resulting from executing the code in the given path. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
+Creates the `MoarVM::Profile` object with the profile information resulting from executing the code in the given `Path::IO`. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
 
 If there is already a SQLite database with the ".db" extension, then that will be used, unless the `:rerun` named argument is specified with a true value.
 
 ### path to pre-generated file with SQL statements (extension: .sql)
 
-Creates the `MoarVM::Profile` object from the pre-generated SQL in the given path. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
+Creates the `MoarVM::Profile` object from the pre-generated SQL in the given `Path::IO`. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
 
 ### path to pre-generated database file (extension: .db)
 
@@ -57,6 +57,11 @@ Returns a `List` of `MoarVM::Profile::Call` objects, where the index of the obje
 my $call := $profile.calls[$call-id];
 ```
 
+calls-overview
+--------------
+
+Returns the `MoarVM::Profile::CallsOverview` object associated with this profile.
+
 ### db
 
 The `DB::SQLite` database handle connected to the database associated with the profile.
@@ -67,6 +72,14 @@ Returns a `List` of `MoarVM::Profile::Deallocation` objects, one for each deallo
 
 ```raku
 .say for $profile.deallocations;
+```
+
+### gc-overview
+
+Returns a `MoarVM::Profile::GCOverview` object. Please note that this will only contain sensible information if at least one garbage collection has been done.
+
+```raku
+say $profile.gc-overview;
 ```
 
 ### gcs
@@ -111,39 +124,199 @@ String with all columns concatenated of associated table, or `Nil` if the class 
 
 ### select
 
-String with a SQL statement to select all columns of the associated table, or `Nil` if the class works on a compound SQL statement.
+String with a SQL statement to select all columns of the associated table(s).
 
-### 
+### table
 
 String with the name of the associated table, or `Nil` if the class works on a compound SQL statement.
 
-MoarVM::Profile::Type
-=====================
+MoarVM::Profile::Allocation
+===========================
 
-The `MoarVM::Type` object encapsulates the information about a type (class, enum, subset) that has been accessed at least once.
+An object containing allocation information about a given `MoarVM::Profile::Call` and a given `MoarVM::Profile::Type`.
 
 Methods
 -------
 
+  * call-id - ID of the associated M:P:Call object
+
+  * count
+
+  * jit
+
+  * replaced
+
+  * spesh
+
+  * type-id - ID of the associated M:P:Type object
+
+MoarVM::Profile::Call
+=====================
+
+An object containing information about a given call to a `MoarVM::Profile::Routine`.
+
+Methods
+-------
+
+  * deopt-all
+
+  * deopt-one
+
+  * exclusive-time
+
+  * entries
+
+  * first-entry-time
+
+  * highest-child-id
+
+  * id
+
+  * inclusive-time
+
+  * inlined-entries
+
+  * jit-entries
+
+  * osr
+
+  * rec-depth
+
+  * routine-id
+
+  * spesh-entries
+
 ### allocations
 
-Returns a `List` with `MoarVM::Profile::Allocation` objects for this type.
+Returns a `List` with `MoarVM::Profile::Allocation` objects for this routine.
 
-### extra-info
+### ancestry
 
-A `Map` with extra information about this type.
+Returns a `List` with `MoarVM::Profile::Call` objects of the parents of this call.
 
-### id
+### parent
 
-The numerical ID of the type in this profile.
+Returns the `MoarVM::Profile::Call` object of the parent of this call, or `Nil` if no parent could be found.
 
-### name
+### parent-id
 
-The name of the this type.
+Returns the `id` of the parent of this call.
 
-### type-links
+MoarVM::Profile::CallsOverview
+==============================
 
-A `Map` with extra information about this links to other types.
+An object containing summary information about all calls in this profile.
+
+Methods
+-------
+
+  * deopt-all-total
+
+  * deopt-one-total
+
+  * entries-total
+
+  * inlined-entries-total
+
+  * jit-entries-total
+
+  * osr-total
+
+  * spesh-entries-total
+
+MoarVM::Profile::Deallocation
+=============================
+
+An object containing information about a de-allocation of a given garbage collect sequence number, the thread performing the garbage collection, and the type being garbage collected.
+
+Methods
+-------
+
+  * gc-seq-num
+
+  * gc-thread-id
+
+  * gen2
+
+  * nursery-fresh
+
+  * nursery-seen
+
+  * type-id
+
+MoarVM::Profile::GC
+===================
+
+An object containing information about a garbage collection run.
+
+Methods
+-------
+
+  * cleared-bytes
+
+  * full
+
+  * gen2-roots
+
+  * promoted-bytes
+
+  * responsible
+
+  * retained-bytes
+
+  * sequence-num
+
+  * start-time
+
+  * stolen-gen2-roots
+
+  * thread-id
+
+  * time
+
+MoarVM::Profile::GCOverview
+===========================
+
+An object containing overview information about garbage collections done in this profile.
+
+methods
+-------
+
+  * avg-major-time
+
+  * avg-minor-time
+
+  * max-major-time
+
+  * max-minor-time
+
+  * min-major-time
+
+  * min-minor-time
+
+  * total-major
+
+  * total-minor
+
+MoarVM::Profile::Overview
+=========================
+
+An object containing overview information about this profile.
+
+Methods
+-------
+
+  * first-entry-time
+
+  * parent-thread-id
+
+  * root-node
+
+  * spesh-time
+
+  * thread-id
+
+  * total-time
 
 MoarVM::Profile::Routine
 ========================
@@ -251,147 +424,33 @@ Methods
 
   * spesh-entries
 
-MoarVM::Profile::Call
+MoarVM::Profile::Type
 =====================
 
-An object containing information about a given call to a `MoarVM::Profile::Routine`.
+The `MoarVM::Type` object encapsulates the information about a type (class, enum, subset) that has been accessed at least once.
 
 Methods
 -------
-
-  * deopt-all
-
-  * deopt-one
-
-  * exclusive-time
-
-  * entries
-
-  * first-entry-time
-
-  * highest-child-id
-
-  * id
-
-  * inclusive-time
-
-  * inlined-entries
-
-  * jit-entries
-
-  * osr
-
-  * rec-depth
-
-  * routine-id
-
-  * spesh-entries
 
 ### allocations
 
-Returns a `List` with `MoarVM::Profile::Allocation` objects for this routine.
+Returns a `List` with `MoarVM::Profile::Allocation` objects for this type.
 
-### ancestry
+### extra-info
 
-Returns a `List` with `MoarVM::Profile::Call` objects of the parents of this call.
+A `Map` with extra information about this type.
 
-### parent
+### id
 
-Returns the `MoarVM::Profile::Call` object of the parent of this call, or `Nil` if no parent could be found.
+The numerical ID of the type in this profile.
 
-### parent-id
+### name
 
-Returns the `id` of the parent of this call.
+The name of the this type.
 
-MoarVM::Profile::Allocation
-===========================
+### type-links
 
-An object containing allocation information about a given `MoarVM::Profile::Call` and a given `MoarVM::Profile::Type`.
-
-Methods
--------
-
-  * call-id - ID of the associated M:P:Call object
-
-  * count
-
-  * jit
-
-  * replaced
-
-  * spesh
-
-  * type-id - ID of the associated M:P:Type object
-
-MoarVM::Profile::Overview
-=========================
-
-An object containing overview information about this profile.
-
-Methods
--------
-
-  * first-entry-time
-
-  * parent-thread-id
-
-  * root-node
-
-  * spesh-time
-
-  * thread-id
-
-  * total-time
-
-MoarVM::Profile::GC
-===================
-
-An object containing information about a garbage collection run.
-
-Methods
--------
-
-  * cleared-bytes
-
-  * full
-
-  * gen2-roots
-
-  * promoted-bytes
-
-  * responsible
-
-  * retained-bytes
-
-  * sequence-num
-
-  * start-time
-
-  * stolen-gen2-roots
-
-  * thread-id
-
-  * time
-
-MoarVM::Profile::Deallocation
-=============================
-
-An object containing information about a de-allocation of a given garbage collect sequence number, the thread performing the garbage collection, and the type being garbage collected.
-
-Methods
--------
-
-  * gc-seq-num
-
-  * gc-thread-id
-
-  * gen2
-
-  * nursery-fresh
-
-  * nursery-seen
-
-  * type-id
+A `Map` with extra information about this links to other types.
 
 CREDITS
 =======

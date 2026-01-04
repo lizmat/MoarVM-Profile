@@ -13,28 +13,30 @@ my sub name2index(str $name) {
     }
 }
 
+my sub gist($self) {
+    my str @parts;
+    for $self.method-names {
+        if $self."$_"() -> $value {
+            @parts.push("$_: $value");
+        }
+    }
+    @parts.join("\n")
+}
+
 #- DefaultParts ----------------------------------------------------------------
 my role DefaultParts {
     has int @.parts is built(:bind);
 
     multi method new(::?CLASS: @a) {
-        self.bless(:parts(my int @parts = @a.map(*.Int)))
+        self.bless(:parts(my int @parts = @a.map({ .defined ?? .Int !! 0 })))
     }
 
-    multi method gist(::?CLASS:D:) {
-        my str @parts;
-        for self.method-names {
-            if self."$_"() -> $value {
-                @parts.push("$_: $value");
-            }
-        }
-        @parts.join("\n")
-    }
+    multi method gist(::?CLASS:D:) { &gist(self) }
 
     my $columns := $?CLASS.method-names.join(",").trans("-" => "_");
     method columns(::?CLASS:) { $columns }
 
-    my $select := "SELECT $columns FROM $_" with $?CLASS.table;
+    my $select := "SELECT $columns FROM $_;" with $?CLASS.table;
     method select(::?CLASS:) { $select // Nil }
 
     my int $index;
@@ -208,6 +210,89 @@ class MoarVM::Profile::Call does DefaultParts {
     }
 }
 
+#- CallsOverview -------------------------------------------------------------
+class MoarVM::Profile::CallsOverview does DefaultParts {
+    method table(--> Nil) { }
+    method method-names() is implementation-detail {
+        BEGIN <
+          entries-total spesh-entries-total jit-entries-total
+          inlined-entries-total deopt-one-total deopt-all-total
+          osr-total
+        >
+    }
+    method select() { q:to/SQL/ }
+SELECT
+  total(entries),
+  total(spesh_entries),
+  total(jit_entries),
+  total(inlined_entries),
+  total(deopt_one),
+  total(deopt_all),
+  total(osr)
+  FROM calls
+SQL
+}
+
+#- GC --------------------------------------------------------------------------
+# CREATE TABLE gcs(
+#  time INT,
+#  retained_bytes INT,
+#  promoted_bytes INT,
+#  gen2_roots INT,
+#  stolen_gen2_roots INT,
+#  full INT,
+#  responsible INT,
+#  cleared_bytes INT,
+#  start_time INT,
+#  sequence_num INT,
+#  thread_id INT,
+#  PRIMARY KEY(sequence_num, thread_id)
+# );
+
+class MoarVM::Profile::GC does DefaultParts {
+    method table(--> 'gcs') { }
+    method method-names() is implementation-detail {
+        BEGIN <
+          time retained-bytes promoted-bytes gen2-roots stolen-gen2-roots
+          full responsible cleared-bytes start-time sequence-num thread-id
+        >
+    }
+}
+
+#- GCOverview ------------------------------------------------------------------
+class MoarVM::Profile::GCOverview does DefaultParts {
+    method table(--> Nil) { }
+    method method-names() is implementation-detail {
+        BEGIN <
+          avg-minor-time min-minor-time max-minor-time
+          avg-major-time min-major-time max-major-time
+          total-minor total-major
+        >
+    }
+    method select() { q:to/SQL/ }
+SELECT
+  AVG(  CASE WHEN full == 0 THEN latest_end - earliest END),
+  MIN(  CASE WHEN full == 0 THEN latest_end - earliest END),
+  MAX(  CASE WHEN full == 0 THEN latest_end - earliest END),
+  AVG(  CASE WHEN full == 1 THEN latest_end - earliest END),
+  MIN(  CASE WHEN full == 1 THEN latest_end - earliest END),
+  MAX(  CASE WHEN full == 1 THEN latest_end - earliest END),
+  TOTAL(CASE WHEN full == 0 THEN latest_end - earliest END),
+  TOTAL(CASE WHEN full == 1 THEN latest_end - earliest END),
+  TOTAL(latest_end - earliest)
+FROM (SELECT
+        MIN(start_time)        AS earliest,
+        MAX(start_time + time) AS latest_end,
+        full
+FROM gcs
+  GROUP BY sequence_num
+  ORDER BY sequence_num ASC)
+SQL
+    multi method gist(MoarVM::Profile::GCOverview:D:) {
+        self.total-minor ?? gist(self) !! "(no garbage collections done)"
+    }
+}
+
 #- Routine ---------------------------------------------------------------------
 # CREATE TABLE routines(
 #  id INTEGER PRIMARY KEY ASC,
@@ -284,32 +369,6 @@ class MoarVM::Profile::Routine {
     }
 }
 
-#- GC --------------------------------------------------------------------------
-# CREATE TABLE gcs(
-#  time INT,
-#  retained_bytes INT,
-#  promoted_bytes INT,
-#  gen2_roots INT,
-#  stolen_gen2_roots INT,
-#  full INT,
-#  responsible INT,
-#  cleared_bytes INT,
-#  start_time INT,
-#  sequence_num INT,
-#  thread_id INT,
-#  PRIMARY KEY(sequence_num, thread_id)
-# );
-
-class MoarVM::Profile::GC does DefaultParts {
-    method table(--> 'gcs') { }
-    method method-names() is implementation-detail {
-        BEGIN <
-          time retained-bytes promoted-bytes gen2-roots stolen-gen2-roots
-          full responsible cleared-bytes start-time sequence-num thread-id
-        >
-    }
-}
-
 #- Deallocation ----------------------------------------------------------------
 # CREATE TABLE deallocations(
 #  gc_seq_num INT,
@@ -332,21 +391,6 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 }
 
 #- RoutineOverview -------------------------------------------------------------
-# SELECT
-#   c.routine_id,
-#   TOTAL(entries),
-#   TOTAL(case WHEN rec_depth = 0 THEN inclusive_time ELSE 0 END),
-#   TOTAL(exclusive_time),
-#   TOTAL(spesh_entries),
-#   TOTAL(jit_entries),
-#   TOTAL(inlined_entries),
-#   TOTAL(osr),
-#   TOTAL(deopt_one),
-#   TOTAL(deopt_all),
-#   COUNT(c.id)
-#  FROM calls c
-#  GROUP BY c.routine_id
-
 class MoarVM::Profile::RoutineOverview does DefaultParts {
     method table(--> Nil) { }
     method method-names() is implementation-detail {
@@ -355,23 +399,25 @@ class MoarVM::Profile::RoutineOverview does DefaultParts {
           inlined-entries osr deopt-one deopt-all site-count
         >
     }
+    method select() { q:to/SQL/ }
+SELECT
+  c.routine_id,
+  TOTAL(entries),
+  TOTAL(case WHEN rec_depth = 0 THEN inclusive_time ELSE 0 END),
+  TOTAL(exclusive_time),
+  TOTAL(spesh_entries),
+  TOTAL(jit_entries),
+  TOTAL(inlined_entries),
+  TOTAL(osr),
+  TOTAL(deopt_one),
+  TOTAL(deopt_all),
+  COUNT(c.id)
+FROM calls c
+GROUP BY c.routine_id
+SQL
 }
 
 #- SpeshOverview ---------------------------------------------------------------
-# SELECT
-#   c.routine_id,
-#   TOTAL(c.deopt_one),
-#   TOTAL(c.deopt_all),
-#   TOTAL(c.osr),
-#   TOTAL(c.entries),
-#   TOTAL(c.inlined_entries),
-#   TOTAL(c.spesh_entries),
-#   TOTAL(c.jit_entries),
-#   COUNT(c.id)
-#   FROM calls c
-#  WHERE c.deopt_one > 0 OR c.deopt_all > 0 OR c.osr > 0
-#  GROUP BY c.routine_id
-
 class MoarVM::Profile::SpeshOverview does DefaultParts {
     method table(--> Nil) { }
     method method-names() is implementation-detail {
@@ -380,31 +426,48 @@ class MoarVM::Profile::SpeshOverview does DefaultParts {
           jit-entries sites
         >
     }
+    method select() { q:to/SQL/ }
+SELECT
+  c.routine_id,
+  TOTAL(c.deopt_one),
+  TOTAL(c.deopt_all),
+  TOTAL(c.osr),
+  TOTAL(c.entries),
+  TOTAL(c.inlined_entries),
+  TOTAL(c.spesh_entries),
+  TOTAL(c.jit_entries),
+  COUNT(c.id)
+FROM calls c
+WHERE c.deopt_one > 0 OR c.deopt_all > 0 OR c.osr > 0
+GROUP BY c.routine_id
+SQL
 }
 
 #- Profile ---------------------------------------------------------------------
 class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     has $.db;
-    has $!types;
+    has $!calls;
+    has $!calls-overview;
+    has $!deallocations;
+    has $!gcs;
+    has $!gc-overview;
     has $!routines;
     has $!routine-overviews;
     has $!spesh-overviews;
-    has $!calls;
-    has $!gcs;
-    has $!deallocations;
+    has $!types;
 
     proto method new(|) {*}
-    multi method new(IO() $io where .e && .extension eq 'db') {
+    multi method new(IO:D $io where .e && .extension eq 'db') {
         self.bless(:db(DB::SQLite.new(:filename(~$io), |%_)))
     }
-    multi method new(IO() $io where .e && .extension eq 'sql', :$create) {
+    multi method new(IO:D $io where .e && .extension eq 'sql', :$create) {
         my $filename := $create ?? ~$io.extension("db") !! "";
         my $db := DB::SQLite.new(:$filename, |%_);
         $db.execute($io.slurp);
 
         self.bless(:$db)
     }
-    multi method new(IO() $io where .e, :$create, :$rerun) {
+    multi method new(IO:D $io where .e, :$create, :$rerun) {
         my $sql := $*TMPDIR.add(nano ~ ".sql");
         my $db  := $io.extension("db");
         if $db.e {
@@ -428,7 +491,14 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
 
         self.bless(:$db)
     }
-    multi method new(Str:D $code) {
+    multi method new(Str:D $code, |c) {
+
+        # We can't dispatch properly on IO(), so we catch anything here
+        # that looks like a file that needs to be run / loaded
+        unless $code.contains(/\s/) {
+            return self.new($_, |c) if .e given $code.IO;
+        }
+
         my $sql := $*TMPDIR.add(nano ~ ".sql");
 
         my $proc := run $*EXECUTABLE, "--profile=$sql", "-e", $code, :err;
@@ -436,20 +506,21 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
             exit $exit;
         }
 
-        my $db := DB::SQLite.new(|%_);
+        my $db := DB::SQLite.new(|c);
         $db.execute($sql.slurp);
 
         self.bless(:$db)
     }
 
     method query(MoarVM::Profile:D: Str:D $query, |c) {
+#say $query;  # for debugging
         $!db.query($query, |c)
     }
 
     method calls(MoarVM::Profile:D:) {
         $!calls // do {
             my @calls is default(Nil);
-            for $!db.query(MoarVM::Profile::Call.select).arrays {
+            for self.query(MoarVM::Profile::Call.select).arrays {
                 my $call := MoarVM::Profile::Call.new(self, $_);
                 @calls[$call.id] := $call;
             }
@@ -459,7 +530,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
 
     method deallocations(MoarVM::Profile:D:) {
         $!deallocations // do {
-            $!deallocations := $!db.query(MoarVM::Profile::Deallocation.select).arrays.map({
+            $!deallocations := self.query(MoarVM::Profile::Deallocation.select).arrays.map({
                 MoarVM::Profile::Deallocation.new(self, $_)
             }).List
         }
@@ -467,16 +538,23 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
 
     method gcs(MoarVM::Profile:D:) {
         $!gcs // do {
-            $!routines := $!db.query(MoarVM::Profile::GC.select).arrays.map({
-                MoarVM::Profile::GC.new(self, $_)
+            $!gcs := self.query(MoarVM::Profile::GC.select).arrays.map({
+                MoarVM::Profile::GC.new($_)
             }).List
         }
+    }
+
+    method gc-overview(MoarVM::Profile:D:) {
+        $!gc-overview
+          // ($!gc-overview := MoarVM::Profile::GCOverview.new(
+               self.query(MoarVM::Profile::GCOverview.select).array
+             ))
     }
 
     method routines(MoarVM::Profile:D:) {
         $!routines // do {
             my @routines is default(Nil);
-            for $!db.query(MoarVM::Profile::Routine.select).arrays {
+            for self.query(MoarVM::Profile::Routine.select).arrays {
                 my $routine := MoarVM::Profile::Routine.new(self, $_);
                 @routines[$routine.id] := $routine;
             }
@@ -484,26 +562,19 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
         }
     }
 
+    method calls-overview(MoarVM::Profile:D:) is implementation-detail {
+        $!calls-overview // do {
+            $!calls-overview := MoarVM::Profile::CallsOverview.new(
+              self.query(MoarVM::Profile::CallsOverview.select).array
+            )
+        }
+    }
+
     method routine-overviews(MoarVM::Profile:D:) is implementation-detail {
         $!routine-overviews // do {
             my @overviews is default(Nil);
-            for $!db.query(q:to/QUERY/).arrays -> @values {
-SELECT
-  c.routine_id,
-  TOTAL(entries),
-  TOTAL(case WHEN rec_depth = 0 THEN inclusive_time ELSE 0 END),
-  TOTAL(exclusive_time),
-  TOTAL(spesh_entries),
-  TOTAL(jit_entries),
-  TOTAL(inlined_entries),
-  TOTAL(osr),
-  TOTAL(deopt_one),
-  TOTAL(deopt_all),
-  COUNT(c.id)
-  FROM calls c
-  GROUP BY c.routine_id
-QUERY
-                my $overview := MoarVM::Profile::RoutineOverview.new(@values);
+            for self.query(MoarVM::Profile::RoutineOverview.select).arrays {
+                my $overview := MoarVM::Profile::RoutineOverview.new($_);
                 @overviews[$overview.id] := $overview;
             }
             $!routine-overviews := @overviews.List
@@ -513,22 +584,8 @@ QUERY
     method spesh-overviews(MoarVM::Profile:D:) is implementation-detail {
         $!spesh-overviews // do {
             my @overviews is default(Nil);
-            for $!db.query(q:to/QUERY/).arrays -> @values {
-SELECT
-  c.routine_id,
-  TOTAL(c.deopt_one),
-  TOTAL(c.deopt_all),
-  TOTAL(c.osr),
-  TOTAL(c.entries),
-  TOTAL(c.inlined_entries),
-  TOTAL(c.spesh_entries),
-  TOTAL(c.jit_entries),
-  COUNT(c.id)
-  FROM calls c
-  WHERE c.deopt_one > 0 OR c.deopt_all > 0 OR c.osr > 0
-  GROUP BY c.routine_id
-QUERY
-                my $overview := MoarVM::Profile::SpeshOverview.new(@values);
+            for self.query(MoarVM::Profile::SpeshOverview.select).arrays {
+                my $overview := MoarVM::Profile::SpeshOverview.new($_);
                 @overviews[$overview.id] := $overview;
             }
             $!spesh-overviews := @overviews.List
@@ -538,7 +595,7 @@ QUERY
     method types(MoarVM::Profile:D:) {
         $!types // do {
             my @types is default(Nil);
-            for $!db.query(MoarVM::Profile::Type.select).arrays {
+            for self.query(MoarVM::Profile::Type.select).arrays {
                 my $type := MoarVM::Profile::Type.new(self, $_);
                 @types[$type.id] := $type;
             }
@@ -546,15 +603,5 @@ QUERY
         }
     }
 }
-
-#say MoarVM::Profile::Routine.new( (0,"","",-1) );
-#my $profile := MoarVM::Profile.new("bar", :create, :rerun);
-#my $profile := MoarVM::Profile.new(q/sub baz($a) { $a * $a }; baz($_) for ^10/);
-#.say for $profile.gcs;
-#for $profile.routines.grep(*.is-user) {
-#    say $_;
-#    say .calls.gist.indent(2);
-#}
-#.say for $profile.spesh-overviews;
 
 # vim: expandtab shiftwidth=4

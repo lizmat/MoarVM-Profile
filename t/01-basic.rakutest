@@ -1,6 +1,24 @@
 use Test;
 use MoarVM::Profile;
 
-pass "replace me";
+plan 1;
 
-done-testing;
+#say MoarVM::Profile::Routine.new( (0,"","",-1) );
+my $profile = MoarVM::Profile.new(
+  q/sub foo($a) { $a * $a }; foo($_) for ^1000000/
+);
+isa-ok $profile, MoarVM::Profile;
+
+#my $profile := MoarVM::Profile.new(q/sub baz($a) { $a * $a }; baz($_) for ^100000/);
+#for $profile.gcs {
+#    .say;
+#    say "====";
+#}
+#say $profile.gc-overview;
+#for $profile.routines.grep(*.is-user) {
+#    say $_;
+#    say .calls.gist.indent(2);
+#}
+#.say for $profile.spesh-overviews;
+
+# vim: expandtab shiftwidth=4
