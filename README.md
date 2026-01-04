@@ -34,13 +34,13 @@ Creates the `MoarVM::Profile` object with the profile information resulting from
 
 ### path to script to execute
 
-Creates the `MoarVM::Profile` object with the profile information resulting from executing the code in the given `Path::IO`. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
+Creates the `MoarVM::Profile` object with the profile information resulting from executing the code in the given `IO::Path`. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
 
 If there is already a SQLite database with the ".db" extension, then that will be used, unless the `:rerun` named argument is specified with a true value.
 
 ### path to pre-generated file with SQL statements (extension: .sql)
 
-Creates the `MoarVM::Profile` object from the pre-generated SQL in the given `Path::IO`. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
+Creates the `MoarVM::Profile` object from the pre-generated SQL in the given `IO::Path`. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
 
 ### path to pre-generated database file (extension: .db)
 
@@ -535,6 +535,10 @@ AUTHOR
 ======
 
 Elizabeth Mattijsen <liz@raku.rocks>
+
+Source can be located at: https://github.com/lizmat/MoarVM-Profile . Comments and Pull Requests are welcome.
+
+If you like this module, or what I'm doing more generally, committing to a [small sponsorship](https://github.com/sponsors/lizmat/) would mean a great deal to me!
 
 COPYRIGHT AND LICENSE
 =====================

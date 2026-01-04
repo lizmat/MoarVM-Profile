@@ -1,95 +1,99 @@
 use Test;
 use MoarVM::Profile;
 
-plan 43;
+plan 3 * 43;
 
 my constant $times = 1000000;
 
-#say MoarVM::Profile::Routine.new( (0,"","",-1) );
-my $profile = MoarVM::Profile.new(
-  qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times/
-);
-isa-ok $profile, MoarVM::Profile;
+for
+  'code', qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times/,
+  'SQL',  $*PROGRAM.sibling("foo.sql"),
+  'db',   $*PROGRAM.sibling("foo.db")
+-> $source, $target {
+    diag "Testing profile from $source";
+    my $profile := MoarVM::Profile.new($target);
+    isa-ok $profile, MoarVM::Profile;
 
-my @routines := $profile.routines(:name<foo>, :file<-e>, :line(1));
-ok @routines == 1, 'only one routine by this name and file';
+    my @routines := $profile.routines(:name<foo>, :file<-e>, :line(1));
+    ok @routines == 1, 'only one routine by this name and file';
 
-my $routine := @routines.head;
-is-deeply $routine.name, 'foo', 'sub name is ok';
-is-deeply $routine.file, '-e',  'file name is ok';
-is-deeply $routine.line,   1,   'line number is ok';
+    my $routine := @routines.head;
+    is-deeply $routine.name, 'foo', 'sub name is ok';
+    is-deeply $routine.file, '-e',  'file name is ok';
+    is-deeply $routine.line,   1,   'line number is ok';
 
-is-deeply $routine.is-block, False, 'it is not a block';
-is-deeply $routine.is-core,  False, 'it is not from Rakudo core';
-is-deeply $routine.is-user,  True,  'it is a user supplied routine';
+    is-deeply $routine.is-block, False, 'it is not a block';
+    is-deeply $routine.is-core,  False, 'it is not from Rakudo core';
+    is-deeply $routine.is-user,  True,  'it is a user supplied routine';
 
 #- overview --------------------------------------------------------------------
-my $overview := $routine.overview;
-isa-ok $overview, MoarVM::Profile::RoutineOverview;
+    my $overview := $routine.overview;
+    isa-ok $overview, MoarVM::Profile::RoutineOverview;
 
-my $entries         := $overview.entries;
-my $inclusive-time  := $overview.inclusive-time;
-my $exclusive-time  := $overview.exclusive-time;
-my $spesh-entries   := $overview.spesh-entries;
-my $inlined-entries := $overview.inlined-entries;
-my $site-count      := $overview.site-count;
+    my $entries         := $overview.entries;
+    my $inclusive-time  := $overview.inclusive-time;
+    my $exclusive-time  := $overview.exclusive-time;
+    my $spesh-entries   := $overview.spesh-entries;
+    my $inlined-entries := $overview.inlined-entries;
+    my $site-count      := $overview.site-count;
 
-ok $entries        == $times,          'seen all calls made';
-ok $spesh-entries   < $entries,        'fewer spesh entries';
-todo("$inlined-entries < $spesh-entries");
-ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
-ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
+    ok $entries        == $times,          'seen all calls made';
+    ok $spesh-entries   < $entries,        'fewer spesh entries';
+    todo("$inlined-entries < $spesh-entries on Intel???");
+    ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
+    ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
 
 #- calls -----------------------------------------------------------------------
-my @calls := $routine.calls;
-ok @calls == $site-count, 'only one call-site';
+    my @calls := $routine.calls;
+    ok @calls == $site-count, 'only one call-site';
 
-my $call := @calls.head;
-isa-ok $call, MoarVM::Profile::Call;
+    my $call := @calls.head;
+    isa-ok $call, MoarVM::Profile::Call;
 
-ok $call.first-entry-time > 0,                      'valid entry time';
-ok $call.parent-id        < $call.id,               'parent was earlier';
-ok $call.id               < $call.highest-child-id, 'children are later';
-ok $call.entries         == $entries,               'entries matches';
-ok $call.spesh-entries   == $spesh-entries,         'spesh-entries matches';
-ok $call.inlined-entries == $inlined-entries,       'inlined-entries matches';
-ok $call.inclusive-time  == $inclusive-time,        'inclusive time matches';
-ok $call.exclusive-time  == $exclusive-time,        'exclusive time matches';
+    ok $call.first-entry-time > 0,                'valid entry time';
+    ok $call.parent-id        < $call.id,         'parent was earlier';
+    ok $call.id         < $call.highest-child-id, 'children are later';
+    ok $call.entries         == $entries,         'entries matches';
+    ok $call.spesh-entries   == $spesh-entries,   'spesh-entries matches';
+    ok $call.inlined-entries == $inlined-entries, 'inlined-entries matches';
+    ok $call.inclusive-time  == $inclusive-time,  'inclusive time matches';
+    ok $call.exclusive-time  == $exclusive-time,  'exclusive time matches';
 
 #- gc-overview -----------------------------------------------------------------
-my $gc-overview := $profile.gc-overview;
-isa-ok $gc-overview, MoarVM::Profile::GCOverview;
+    my $gc-overview := $profile.gc-overview;
+    isa-ok $gc-overview, MoarVM::Profile::GCOverview;
 
 # Assuming there have not been any full garbage collections done
-ok $gc-overview.min-minor-time < $gc-overview.avg-minor-time, 'min time ok';
-ok $gc-overview.avg-minor-time < $gc-overview.max-minor-time, 'avg time ok';
-ok $gc-overview.max-minor-time < $gc-overview.total-minor,    'max time ok';
-ok $gc-overview.min-major-time == 0, 'min major time ok';
-ok $gc-overview.avg-major-time == 0, 'avg major time ok';
-ok $gc-overview.max-major-time == 0, 'max major time ok';
-ok $gc-overview.total-major    == 0, 'total major time ok';
+    ok $gc-overview.min-minor-time < $gc-overview.avg-minor-time, 'min time ok';
+    ok $gc-overview.avg-minor-time < $gc-overview.max-minor-time, 'avg time ok';
+    ok $gc-overview.max-minor-time < $gc-overview.total-minor,    'max time ok';
+    ok $gc-overview.min-major-time == 0, 'min major time ok';
+    ok $gc-overview.avg-major-time == 0, 'avg major time ok';
+    ok $gc-overview.max-major-time == 0, 'max major time ok';
+    ok $gc-overview.total-major    == 0, 'total major time ok';
 
 #- gcs -------------------------------------------------------------------------
-my @gcs := $profile.gcs;
-ok ([<] @gcs.map(*.sequence-num)), 'sequence numbers advance';
-ok ([<] @gcs.map(*.start-time)),   'start-time advances';
-ok ([==] @gcs.map(*.thread-id)),   'all with the same thread';
+    my @gcs := $profile.gcs;
+    ok ([<] @gcs.map(*.sequence-num)), 'sequence numbers advance';
+    ok ([<] @gcs.map(*.start-time)),   'start-time advances';
+    ok ([==] @gcs.map(*.thread-id)),   'all with the same thread';
 
 #- types -----------------------------------------------------------------------
-my @types := $profile.types(:name<Int>);
-ok @types == 1, 'only one type by this name';
+    my @types := $profile.types(:name<Int>);
+    ok @types == 1, 'only one type by this name';
 
-my $type := @types.head;
-isa-ok $type, MoarVM::Profile::Type;
-is $type.name, 'Int', 'name is ok';
+    my $type := @types.head;
+    isa-ok $type, MoarVM::Profile::Type;
+    is $type.name, 'Int', 'name is ok';
 
-my %extra-info := $type.extra-info;
-isa-ok %extra-info, Map;
+    my %extra-info := $type.extra-info;
+    isa-ok %extra-info, Map;
 
-ok %extra-info<managed_size>:exists, 'managed_size appears to be there';
-ok %extra-info<repr>:exists,         'repr appears to be there';
-ok %extra-info<scdesc>:exists,       'scdesc appears to be there';
-ok %extra-info<type>:exists,         'type appears to be there';
-ok %extra-info<typename>:exists,     'typename appears to be there';
+    ok %extra-info<managed_size>:exists, 'managed_size appears to be there';
+    ok %extra-info<repr>:exists,         'repr appears to be there';
+    ok %extra-info<scdesc>:exists,       'scdesc appears to be there';
+    ok %extra-info<type>:exists,         'type appears to be there';
+    ok %extra-info<typename>:exists,     'typename appears to be there';
+}
 
 # vim: expandtab shiftwidth=4

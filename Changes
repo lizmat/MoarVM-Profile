@@ -1,6 +1,9 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+    - Some documentation fixes, Timo Paulssen++
+    - Add coverage testing
+    - Add sponsor link
 
 0.0.1  2026-01-04T21:08:27+01:00
     - Initial version

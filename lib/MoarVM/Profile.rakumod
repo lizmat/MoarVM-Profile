@@ -28,7 +28,7 @@ my sub gist($self --> Str:D) {
 }
 
 #- DefaultParts ----------------------------------------------------------------
-my role DefaultParts {
+my role DefaultParts {  # UNCOVERABLE
     has int @.parts is built(:bind);
 
     multi method new(::?CLASS: @a) {
@@ -114,7 +114,7 @@ class MoarVM::Profile::Type {
     has $!allocations;
 
     multi method new(MoarVM::Profile::Type: $profile, @a) {
-        self.bless(:$profile, :parts(
+        self.bless(:$profile, :parts(  # UNRESOLVABLE
           (@a[0].Int, name2index(@a[1]), @a[2], @a[3])
         ))
     }
@@ -494,7 +494,12 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
             }
         }
 
-        my $proc := run $*EXECUTABLE, "--profile=$sql", $io, :err;
+        # Run the code, switching off any coverage as that is incompatible
+        # with profiling
+        my %env = %*ENV;
+        %env<MVM_COVERAGE_LOG>:delete;
+        my $proc :=
+          run $*EXECUTABLE, "--profile=$sql", $io, :err, :%env;
         if $proc.exitcode -> $exit {
             exit $exit;
         }
@@ -516,7 +521,12 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
 
         my $sql := $*TMPDIR.add(nano ~ ".sql");
 
-        my $proc := run $*EXECUTABLE, "--profile=$sql", "-e", $code, :err;
+        # Run the code, switching off any coverage as that is incompatible
+        # with profiling
+        my %env = %*ENV;
+        %env<MVM_COVERAGE_LOG>:delete;
+        my $proc :=
+          run $*EXECUTABLE, "--profile=$sql", "-e", $code, :err, :%env;
         if $proc.exitcode -> $exit {
             exit $exit;
         }
