@@ -3,6 +3,5 @@
 ?
 /releases/
 *.rakucov
-foo*
 bar*
 baz*
