@@ -1,26 +1,28 @@
 use Test;
 use MoarVM::Profile;
 
-plan 3 * 43;
+plan 5 * 43;
 
 my constant $times = 1000000;
 
 for
-  'code', qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times/,
-  'SQL',  $*PROGRAM.sibling("foo.sql"),
-  'db',   $*PROGRAM.sibling("foo.db")
--> $source, $target {
+  'code', qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times/, '-e',
+  'io',   $*PROGRAM.sibling("foo.raku"),  't/foo.raku',
+  'path', ~$*PROGRAM.sibling("foo.raku"), 't/foo.raku',
+  'SQL',  $*PROGRAM.sibling("foo.sql"),   '-e',
+  'db',   $*PROGRAM.sibling("foo.db"),    '-e'
+-> $source, $target, $file {
     diag "Testing profile from $source";
     my $profile := MoarVM::Profile.new($target);
     isa-ok $profile, MoarVM::Profile;
 
-    my @routines := $profile.routines(:name<foo>, :file<-e>, :line(1));
+    my @routines := $profile.routines(:name<foo>, :$file, :line(1));
     ok @routines == 1, 'only one routine by this name and file';
 
     my $routine := @routines.head;
     is-deeply $routine.name, 'foo', 'sub name is ok';
-    is-deeply $routine.file, '-e',  'file name is ok';
-    is-deeply $routine.line,   1,   'line number is ok';
+    is-deeply $routine.file, $file, 'file name is ok';
+    is-deeply $routine.line, 1,     'line number is ok';
 
     is-deeply $routine.is-block, False, 'it is not a block';
     is-deeply $routine.is-core,  False, 'it is not from Rakudo core';

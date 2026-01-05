@@ -48,15 +48,16 @@ my role DefaultParts {  # UNCOVERABLE
     # consumed in the class (the mainline of the role is effectively the
     # COMPOSE phaser)
     my int $index;
-    for $?CLASS.method-names -> $name {
+    for $?CLASS.method-names -> $name {  # UNCOVERABLE
 
         # Need to create a local copy of the value to be used as index
         # otherwise they will all refer to the highest value seen
         my int $actual = $index++;
 
         my $method := my method (::?CLASS:D: --> int) { @!parts[$actual] }
-        $method.^set_name($name);  # XXX why doesn't this work?
-        $?CLASS.^add_method($name, $method);
+        # XXX why doesn't the set_name work?
+        $method.^set_name($name);  # UNCOVERABLE
+        $?CLASS.^add_method($name, $method);  # UNCOVERABLE
     }
 }
 
@@ -114,7 +115,7 @@ class MoarVM::Profile::Type {
     has $!allocations;
 
     multi method new(MoarVM::Profile::Type: $profile, @a) {
-        self.bless(:$profile, :parts(  # UNRESOLVABLE
+        self.bless(:$profile, :parts(  # UNCOVERABLE
           (@a[0].Int, name2index(@a[1]), @a[2], @a[3])
         ))
     }
@@ -484,15 +485,6 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     }
     multi method new(IO:D $io where .e, :$create, :$rerun) {
         my $sql := $*TMPDIR.add(nano ~ ".sql");
-        my $db  := $io.extension("db");
-        if $db.e {
-            if $rerun {
-                $db.unlink if $create;
-            }
-            else {
-                return self.new($db, :$create);
-            }
-        }
 
         # Run the code, switching off any coverage as that is incompatible
         # with profiling
@@ -504,8 +496,8 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
             exit $exit;
         }
 
-        my $filename := $create ?? ~$db !! "";
-        $db := DB::SQLite.new(:$filename, |%_);
+        my $filename := $create ?? $io.extension("db") !! "";
+        my $db := DB::SQLite.new(:$filename, |%_);
         $db.execute($sql.slurp);
         $sql.unlink;
 
