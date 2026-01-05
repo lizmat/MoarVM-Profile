@@ -155,8 +155,8 @@ class MoarVM::Profile::Type {
               ~ MoarVM::Profile::Allocation.table
               ~ " WHERE type_id = ?";
 
-            $!allocations := $!profile.db.query($query, self.id).arrays.map({
-                MoarVM::Profile::Routine.new(self, $_)
+            $!allocations := $!profile.query($query, self.id).arrays.map({
+                MoarVM::Profile::Allocation.new($_)
             }).List
         }
     }
@@ -183,7 +183,7 @@ class MoarVM::Profile::Type {
 # );
 
 class MoarVM::Profile::Call does DefaultParts {
-    has $!profile;
+    has $.profile;
     has $!allocations;
     has $!ancestry;
 
@@ -200,15 +200,23 @@ class MoarVM::Profile::Call does DefaultParts {
         >
     }
 
-    method allocations(MoarVM::Profile::Call:D: --> List) {
+    method allocations(MoarVM::Profile::Call:D: --> List:D) {
         $!allocations // do {
-            my int $id = self.id;
-            $!allocations := $!profile.allocations.grep(*.call-id == $id).List
+            my constant $query = "SELECT "
+              ~ MoarVM::Profile::Allocation.columns
+              ~ " FROM "
+              ~ MoarVM::Profile::Allocation.table
+              ~ " WHERE call_id = ?";
+
+            $!allocations := $!profile.query($query, self.id).arrays.map({
+                MoarVM::Profile::Allocation.new($_)
+            }).List
         }
     }
 
     method parent(MoarVM::Profile::Call:D: --> MoarVM::Profile::Call:D) {
-        $!profile.calls[self.parent-id] // Nil
+        my int $parent-id = self.parent-id;
+        $!profile.calls.first(*.id == $parent-id)
     }
 
     method ancestry(MoarVM::Profile::Call:D: --> List) {
@@ -216,10 +224,12 @@ class MoarVM::Profile::Call does DefaultParts {
             my @parents;
             my @calls := $!profile.calls;
             my $call   = self;
-            while @calls[$call.parent-id] -> $parent {
+            while $call.parent-id -> int $id {
+                my $parent := @calls[$id];
                 @parents.unshift($parent);
                 $call = $parent;
             }
+            @parents.unshift(@calls.head);
             $!ancestry := @parents.List
         }
     }
@@ -227,7 +237,7 @@ class MoarVM::Profile::Call does DefaultParts {
 
 #- CallsOverview -------------------------------------------------------------
 class MoarVM::Profile::CallsOverview does DefaultParts {
-    method table(--> Nil) { }
+    method table(--> 'calls') { }
     method method-names() is implementation-detail {
         BEGIN <
           entries-total spesh-entries-total jit-entries-total
@@ -276,7 +286,7 @@ class MoarVM::Profile::GC does DefaultParts {
 
 #- GCOverview ------------------------------------------------------------------
 class MoarVM::Profile::GCOverview does DefaultParts {
-    method table(--> Nil) { }
+    method table(--> 'gcs') { }
     method method-names() is implementation-detail {
         BEGIN <
           avg-minor-time min-minor-time max-minor-time
@@ -310,7 +320,7 @@ SQL
 
 #- RoutineOverview -------------------------------------------------------------
 class MoarVM::Profile::RoutineOverview does DefaultParts {
-    method table(--> Nil) { }
+    method table(--> 'calls') { }
     method method-names() is implementation-detail {
         BEGIN <
           id entries inclusive-time exclusive-time spesh-entries jit-entries
@@ -337,7 +347,7 @@ SQL
 
 #- SpeshOverview ---------------------------------------------------------------
 class MoarVM::Profile::SpeshOverview does DefaultParts {
-    method table(--> Nil) { }
+    method table(--> 'calls') { }
     method method-names() is implementation-detail {
         BEGIN <
           id deopt-one deopt-all osr entries inlined-entries spesh-entries
@@ -461,6 +471,7 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 #- Profile ---------------------------------------------------------------------
 class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     has $.db;
+    has $!overview;
     has $!calls;
     has $!calls-overview;
     has $!deallocations;
@@ -536,6 +547,13 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
         }
 #say $query;  # for debugging
         $!db.query($query, |c)
+    }
+
+    method overview(MoarVM::Profile:D:) {
+        $!overview
+          // ($!overview := MoarVM::Profile::Overview.new(
+               self.query(MoarVM::Profile::Overview.select).array
+             ))
     }
 
     method calls(MoarVM::Profile:D: --> List:D) {

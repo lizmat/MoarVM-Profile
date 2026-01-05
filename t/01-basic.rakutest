@@ -1,10 +1,24 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 43;
+plan 5 * 66;
 
 my constant $times = 1000000;
 
+my sub test-object-sanity($object, $type) is test-assertion {
+    subtest "Testing sanity of $type.^name() object" => {
+        plan 6;
+
+        isa-ok $object,$type;
+        isa-ok $object.gist, Str;
+        isa-ok $object.table, Str;
+        isa-ok $object.method-names, List;
+        isa-ok $object.columns, Str;
+        isa-ok $object.select, Str;
+    }
+}
+
+#- profile ---------------------------------------------------------------------
 for
   'code', qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times/, '-e',
   'io',   $*PROGRAM.sibling("foo.raku"),  't/foo.raku',
@@ -15,11 +29,22 @@ for
     diag "Testing profile from $source";
     my $profile := MoarVM::Profile.new($target);
     isa-ok $profile, MoarVM::Profile;
+    isa-ok $profile.gist, Str;
 
+    my $overview := $profile.overview;
+    test-object-sanity $overview, MoarVM::Profile::Overview;
+
+    ok $overview.total-time,     'some time was spent indeed';
+    ok $overview.spesh-time,     'some time was spent in spesh indeed';
+    ok $overview.thread-id == 1, 'and only one thread active';
+
+#- routine ---------------------------------------------------------------------
     my @routines := $profile.routines(:name<foo>, :$file, :line(1));
     ok @routines == 1, 'only one routine by this name and file';
 
     my $routine := @routines.head;
+    test-object-sanity $routine, MoarVM::Profile::Routine;
+
     is-deeply $routine.name, 'foo', 'sub name is ok';
     is-deeply $routine.file, $file, 'file name is ok';
     is-deeply $routine.line, 1,     'line number is ok';
@@ -28,9 +53,8 @@ for
     is-deeply $routine.is-core,  False, 'it is not from Rakudo core';
     is-deeply $routine.is-user,  True,  'it is a user supplied routine';
 
-#- overview --------------------------------------------------------------------
-    my $overview := $routine.overview;
-    isa-ok $overview, MoarVM::Profile::RoutineOverview;
+    $overview := $routine.overview;
+    test-object-sanity $overview, MoarVM::Profile::RoutineOverview;
 
     my $entries         := $overview.entries;
     my $inclusive-time  := $overview.inclusive-time;
@@ -50,7 +74,7 @@ for
     ok @calls == $site-count, 'only one call-site';
 
     my $call := @calls.head;
-    isa-ok $call, MoarVM::Profile::Call;
+    test-object-sanity $call, MoarVM::Profile::Call;
 
     ok $call.first-entry-time > 0,                'valid entry time';
     ok $call.parent-id        < $call.id,         'parent was earlier';
@@ -61,9 +85,18 @@ for
     ok $call.inclusive-time  == $inclusive-time,  'inclusive time matches';
     ok $call.exclusive-time  == $exclusive-time,  'exclusive time matches';
 
+    my $parent := $call.parent;
+    ok $parent.id == $call.parent-id, 'parent ID appears correct';
+    test-object-sanity $parent, MoarVM::Profile::Call;
+
+    my $ancestry := $call.ancestry;
+    isa-ok $ancestry, List;
+    ok $ancestry.are(MoarVM::Profile::Call), 'ancestry consists of calls';
+    ok $ancestry.head.id == $profile.calls.head.id, 'always wind up at first';
+
 #- gc-overview -----------------------------------------------------------------
     my $gc-overview := $profile.gc-overview;
-    isa-ok $gc-overview, MoarVM::Profile::GCOverview;
+    test-object-sanity $gc-overview, MoarVM::Profile::GCOverview;
 
 # Assuming there have not been any full garbage collections done
     ok $gc-overview.min-minor-time < $gc-overview.avg-minor-time, 'min time ok';
@@ -76,26 +109,48 @@ for
 
 #- gcs -------------------------------------------------------------------------
     my @gcs := $profile.gcs;
+    ok +@gcs, 'there should have been some garbage collections';
     ok ([<] @gcs.map(*.sequence-num)), 'sequence numbers advance';
     ok ([<] @gcs.map(*.start-time)),   'start-time advances';
     ok ([==] @gcs.map(*.thread-id)),   'all with the same thread';
+
+    my $gc := @gcs.head;
+    test-object-sanity($gc, MoarVM::Profile::GC);
+
+    ok $gc.responsible  == 1, 'it was a responsible garbage collection';
+    ok $gc.sequence-num == 1, 'first garbage collection';
+    ok $gc.thread-id    == 1, 'only have one thread';
 
 #- types -----------------------------------------------------------------------
     my @types := $profile.types(:name<Int>);
     ok @types == 1, 'only one type by this name';
 
     my $type := @types.head;
-    isa-ok $type, MoarVM::Profile::Type;
+    test-object-sanity $type, MoarVM::Profile::Type;
     is $type.name, 'Int', 'name is ok';
 
-    my %extra-info := $type.extra-info;
-    isa-ok %extra-info, Map;
+    my $extra-info := $type.extra-info;
+    isa-ok $extra-info, Map;
 
-    ok %extra-info<managed_size>:exists, 'managed_size appears to be there';
-    ok %extra-info<repr>:exists,         'repr appears to be there';
-    ok %extra-info<scdesc>:exists,       'scdesc appears to be there';
-    ok %extra-info<type>:exists,         'type appears to be there';
-    ok %extra-info<typename>:exists,     'typename appears to be there';
+    ok $extra-info<managed_size>:exists, 'managed_size appears to be there';
+    ok $extra-info<repr>:exists,         'repr appears to be there';
+    ok $extra-info<scdesc>:exists,       'scdesc appears to be there';
+    ok $extra-info<type>:exists,         'type appears to be there';
+    ok $extra-info<typename>:exists,     'typename appears to be there';
+
+    my $type-links := $type.type-links;
+    isa-ok $type-links, Map;
+
+    my @allocations := $type.allocations;
+    ok +@allocations, 'seen allocations for this type';
+
+    my $allocation := @allocations.head;
+    test-object-sanity $allocation, MoarVM::Profile::Allocation;
+
+    ok $allocation.call-id, 'there appears to be a call ID';
+    ok $allocation.type-id == $type.id, 'with the correct type ID';
+    ok $allocation.spesh < $times, 'with an expected number of spesh count';
+    ok $allocation.count < $times, 'with an expected count';
 }
 
 # vim: expandtab shiftwidth=4
