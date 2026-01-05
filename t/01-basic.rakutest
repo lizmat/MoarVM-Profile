@@ -19,10 +19,11 @@ my sub test-object-sanity($object, $type) is test-assertion {
 }
 
 #- profile ---------------------------------------------------------------------
+my $foo-raku := $*PROGRAM.sibling("foo.raku");
 for
   'code', qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times/, '-e',
-  'io',   $*PROGRAM.sibling("foo.raku"),  't/foo.raku',
-  'path', ~$*PROGRAM.sibling("foo.raku"), 't/foo.raku',
+  'io',   $foo-raku,  ~$foo-raku,
+  'path', ~$foo-raku, ~$foo-raku,
   'SQL',  $*PROGRAM.sibling("foo.sql"),   '-e',
   'db',   $*PROGRAM.sibling("foo.db"),    '-e'
 -> $source, $target, $file {
