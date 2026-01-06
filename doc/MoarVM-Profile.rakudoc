@@ -34,16 +34,16 @@ Creates the C<MoarVM::Profile> object with the profile information
 resulting from executing the given code, without creating a permanent
 SQLite database file.
 
+If the string does not contain any whitespace, and interpreting the
+string as a path yields a file that exists, then it will be assumed
+to be a script with executable code.
+
 =head3 path to script to execute
 
 Creates the C<MoarVM::Profile> object with the profile information
 resulting from executing the code in the given C<IO::Path>.  If the
 named argument C<:create> is specified with a true value, a permanent
 SQLite database file will be created with the ".db" extension.
-
-If there is already a SQLite database with the ".db" extension,
-then that will be used, unless the C<:rerun> named argument is
-specified with a true value.
 
 =head3 path to pre-generated file with SQL statements (extension: .sql)
 
@@ -86,6 +86,10 @@ each deallocation having been done.
 .say for $profile.deallocations;
 =end code
 
+=head3 files
+
+Returns a sorted C<List> of file names found in this profile.
+
 =head3 gc-overview
 
 Returns a C<MoarVM::Profile::GCOverview> object.  Please note that this
@@ -104,6 +108,10 @@ garbage collection run having been done.
 =begin code :lang<raku>
 .say for $profile.gcs;
 =end code
+
+=head3 names
+
+Returns a sorted C<List> of routine names found in this profile.
 
 =head3 query
 
@@ -139,6 +147,14 @@ of the object is the same as the C<.id> of the object.
 =begin code :lang<raku>
 my $type := $profile.types[$type-id];
 =end code
+
+=head3 user-files
+
+Returns a sorted C<List> of user file names found in this profile.
+
+=head3 user-names
+
+Returns a sorted C<List> of user routine names found in this profile.
 
 =head1 SUBTYPES
 
@@ -287,13 +303,16 @@ An object containing information about a garbage collection run.
 =item cleared-bytes
 =item gen2-roots
 =item promoted-bytes
-=item responsible
 =item retained-bytes
 =item stolen-gen2-roots
 
 =head3 full
 
 B<1> if this was a full garbage collection, else B<0>.
+
+=head3 responsible
+
+The ID of the thread that initiated the garbage collection.
 
 =head3 sequence-num
 

@@ -27,6 +27,25 @@ my sub gist($self --> Str:D) {
     @parts.join("\n")
 }
 
+# The logic for running code and creating a profile from it, and
+# if something went wrong, showing the error (otherwise mute STDERR)
+my sub run-code($file, *@args) {
+
+    # Run the code, switching off any coverage as that is incompatible
+    # with profiling
+    my %env = %*ENV;
+    %env<MVM_COVERAGE_LOG>:delete;
+
+    my $proc := run $*EXECUTABLE, "--profile=$file", |@args, :err, :%env;
+    if $proc.exitcode -> $exit {
+
+        note $proc.err.slurp.chomp;  # UNCOVERABLE
+        exit $exit;  # UNCOVERABLE
+    }
+
+    $proc
+}
+
 #- DefaultParts ----------------------------------------------------------------
 my role DefaultParts {  # UNCOVERABLE
     has int @.parts is built(:bind);
@@ -412,7 +431,7 @@ class MoarVM::Profile::Routine {
             @names[$index]
         }
         else {
-            '(block)'
+            '(block)'  # UNCOVERABLE
         }
     }
     method file(MoarVM::Profile::Routine:D: --> str) { @names[@!parts[3]] }
@@ -478,7 +497,10 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     has $!routine-overviews;
     has $!spesh-overviews;
     has $!types;
-    has $!file-ids;
+    has $!files;
+    has $!names;
+    has $!user-files;
+    has $!user-names;
 
     proto method new(|) {*}
     multi method new(IO:D $io where .e && .extension eq 'db') {
@@ -491,19 +513,10 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
 
         self.bless(:$db)
     }
-    multi method new(IO:D $io where .e, :$create, :$rerun) {
+    multi method new(IO:D $io where .e, :$create) {
         my $sql := $*TMPDIR.add(nano ~ ".sql");
 
-        # Run the code, switching off any coverage as that is incompatible
-        # with profiling
-        my %env = %*ENV;
-        %env<MVM_COVERAGE_LOG>:delete;
-        my $proc :=
-          run $*EXECUTABLE, "--profile=$sql", $io, :err, :%env;
-        if $proc.exitcode -> $exit {
-            exit $exit;
-        }
-
+        my $proc     := run-code($sql, $io);
         my $filename := $create ?? $io.extension("db") !! "";
         my $db := DB::SQLite.new(:$filename, |%_);
         $db.execute($sql.slurp);
@@ -519,19 +532,9 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
             return self.new($_, |c) if .e given $code.IO;
         }
 
-        my $sql := $*TMPDIR.add(nano ~ ".sql");
-
-        # Run the code, switching off any coverage as that is incompatible
-        # with profiling
-        my %env = %*ENV;
-        %env<MVM_COVERAGE_LOG>:delete;
-        my $proc :=
-          run $*EXECUTABLE, "--profile=$sql", "-e", $code, :err, :%env;
-        if $proc.exitcode -> $exit {
-            exit $exit;
-        }
-
-        my $db := DB::SQLite.new(|c);
+        my $sql  := $*TMPDIR.add(nano ~ ".sql");
+        my $proc := run-code($sql, "-e", $code);
+        my $db   := DB::SQLite.new(|c);
         $db.execute($sql.slurp);
 
         self.bless(:$db)
@@ -567,7 +570,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     method deallocations(MoarVM::Profile:D: --> List:D) {
         $!deallocations // do {
             $!deallocations := self.query(MoarVM::Profile::Deallocation.select).arrays.map({
-                MoarVM::Profile::Deallocation.new(self, $_)
+                MoarVM::Profile::Deallocation.new($_)
             }).List
         }
     }
@@ -587,9 +590,32 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
              ))
     }
 
-    method file-ids(MoarVM::Profile:D:) {
-        $!file-ids //
-          ($!file-ids := self.routines.map(*.file-index).unique.List)
+    method files(MoarVM::Profile:D:) {
+        $!files // ($!files := @names[self!map-routines({
+            if .file-index -> $index { $index }
+        })].sort(*.fc).List)
+    }
+
+    method names(MoarVM::Profile:D:) {
+        $!names // ($!names := @names[self!map-routines({
+            if .name-index -> $index { $index }
+        })].sort(*.fc).List)
+    }
+
+    method user-files(MoarVM::Profile:D:) {
+        $!user-files // ($!user-files := @names[self!map-routines({
+            if .is-user && .file-index -> $index { $index }
+        })].sort(*.fc).List)
+    }
+
+    method user-names(MoarVM::Profile:D:) {
+        $!user-names // ($!user-names := @names[self!map-routines({
+            if .is-user && .name-index -> $index { $index }
+        })].sort(*.fc).List)
+    }
+
+    method !map-routines(&mapper) {
+        self.routines.map(&mapper).unique.List
     }
 
     method routines(MoarVM::Profile:D: --> List:D) {
@@ -632,7 +658,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
                 }
             }
 
-            return ();
+            die "Unhandled combination of arguments: %_.raku()";
         }
 
         $!routines // do {
@@ -680,7 +706,7 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
                 }).List
             }
             else {
-                return ();
+                die "Unhandled combination of arguments: %_.raku()";
             }
         }
 

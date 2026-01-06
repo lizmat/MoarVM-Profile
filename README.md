@@ -32,11 +32,11 @@ The main class provided by this distribution is the `MoarVM::Profile` class. Ins
 
 Creates the `MoarVM::Profile` object with the profile information resulting from executing the given code, without creating a permanent SQLite database file.
 
+If the string does not contain any whitespace, and interpreting the string as a path yields a file that exists, then it will be assumed to be a script with executable code.
+
 ### path to script to execute
 
 Creates the `MoarVM::Profile` object with the profile information resulting from executing the code in the given `IO::Path`. If the named argument `:create` is specified with a true value, a permanent SQLite database file will be created with the ".db" extension.
-
-If there is already a SQLite database with the ".db" extension, then that will be used, unless the `:rerun` named argument is specified with a true value.
 
 ### path to pre-generated file with SQL statements (extension: .sql)
 
@@ -74,6 +74,10 @@ Returns a `List` of `MoarVM::Profile::Deallocation` objects, one for each deallo
 .say for $profile.deallocations;
 ```
 
+### files
+
+Returns a sorted `List` of file names found in this profile.
+
 ### gc-overview
 
 Returns a `MoarVM::Profile::GCOverview` object. Please note that this will only contain sensible information if at least one garbage collection has been done.
@@ -89,6 +93,10 @@ Returns a `List` of `MoarVM::Profile::GC` objects, one for each garbage collecti
 ```raku
 .say for $profile.gcs;
 ```
+
+### names
+
+Returns a sorted `List` of routine names found in this profile.
 
 ### query
 
@@ -123,6 +131,14 @@ Returns a `List` of `MoarVM::Profile::Type` objects, where the index of the obje
 ```raku
 my $type := $profile.types[$type-id];
 ```
+
+### user-files
+
+Returns a sorted `List` of user file names found in this profile.
+
+### user-names
+
+Returns a sorted `List` of user routine names found in this profile.
 
 SUBTYPES
 ========
@@ -292,8 +308,6 @@ Methods
 
   * promoted-bytes
 
-  * responsible
-
   * retained-bytes
 
   * stolen-gen2-roots
@@ -301,6 +315,10 @@ Methods
 ### full
 
 **1** if this was a full garbage collection, else **0**.
+
+### responsible
+
+The ID of the thread that initiated the garbage collection.
 
 ### sequence-num
 
