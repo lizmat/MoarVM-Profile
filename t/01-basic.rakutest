@@ -103,7 +103,7 @@ for
     $spesh-entries   := $cs-overview.spesh-entries-total;
     $inlined-entries := $cs-overview.inlined-entries-total;
     ok $spesh-entries < $entries, 'spesh entries < total entries';
-    todo("$inlined-entries < $spesh-entries on Intel???");
+note("$inlined-entries < $spesh-entries on Intel???");
     ok $inlined-entries < $spesh-entries, 'inlined entries < spesh entries';
     ok $cs-overview.osr-total == 1, 'only one on stack replacement done';
 
