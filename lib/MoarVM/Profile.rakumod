@@ -435,9 +435,6 @@ class MoarVM::Profile::Routine {
     method overview(MoarVM::Profile::Routine:D: --> MoarVM::Profile::RoutineOverview:D) {
         $!profile.routine-overviews[$.id] // Nil
     }
-    method spesh(MoarVM::Profile::Routine:D: --> MoarVM::Profile::SpeshOverview) {
-        $!profile.spesh-overviews[$.id] // Nil
-    }
 
     method calls(MoarVM::Profile::Routine:D: --> List:D) {
         $!calls // do {
@@ -668,14 +665,10 @@ class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
     }
 
     method spesh-overviews(MoarVM::Profile:D:) is implementation-detail {
-        $!spesh-overviews // do {
-            my @overviews is default(Nil);
-            for self.query(MoarVM::Profile::SpeshOverview.select).arrays {
-                my $overview := MoarVM::Profile::SpeshOverview.new($_);
-                @overviews[$overview.id] := $overview;
-            }
-            $!spesh-overviews := @overviews.List
-        }
+        $!spesh-overviews // ($!spesh-overviews :=
+          self.query(MoarVM::Profile::SpeshOverview.select).arrays.map({
+              MoarVM::Profile::SpeshOverview.new($_);
+          }).List)
     }
 
     method types(MoarVM::Profile:D: --> List:D) {

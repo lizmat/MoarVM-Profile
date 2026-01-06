@@ -426,10 +426,6 @@ The name of the `Callable`, "(block)" if there is no name, implying this is some
 
 Returns the `MoarVM:Profile::RoutineOverview` object associated with this `Callable`.
 
-### spesh
-
-Returns the `MoarVM:Profile::SpeshOverview` object associated with this `Callable`, if any.
-
 MoarVM::Profile::RoutineOverview
 ================================
 

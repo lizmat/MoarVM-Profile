@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 66;
+plan 5 * 72;
 
 my constant $times = 1000000;
 
@@ -95,6 +95,16 @@ for
     ok $ancestry.are(MoarVM::Profile::Call), 'ancestry consists of calls';
     ok $ancestry.head.id == $profile.calls.head.id, 'always wind up at first';
 
+#- calls-overview --------------------------------------------------------------
+    my $cs-overview := $profile.calls-overview;
+    test-object-sanity $cs-overview, MoarVM::Profile::CallsOverview;
+
+    ok $cs-overview.spesh-entries-total < $cs-overview.entries-total,
+      'spesh entries < total entries';
+    ok $cs-overview.inlined-entries-total < $cs-overview.spesh-entries-total,
+      'inlined entries < spesh entries';
+    ok $cs-overview.osr-total == 1, 'only one on stack replacement done';
+
 #- gc-overview -----------------------------------------------------------------
     my $gc-overview := $profile.gc-overview;
     test-object-sanity $gc-overview, MoarVM::Profile::GCOverview;
@@ -152,6 +162,15 @@ for
     ok $allocation.type-id == $type.id, 'with the correct type ID';
     ok $allocation.spesh < $times, 'with an expected number of spesh count';
     ok $allocation.count < $times, 'with an expected count';
+
+#- spesh-overview --------------------------------------------------------------
+    my $spesh-overviews := $profile.spesh-overviews;
+    isa-ok $spesh-overviews, List;
+
+    my $sp-overview := $spesh-overviews.head;
+    test-object-sanity $sp-overview, MoarVM::Profile::SpeshOverview;
+
+    # not sure what to reliably test here
 }
 
 # vim: expandtab shiftwidth=4

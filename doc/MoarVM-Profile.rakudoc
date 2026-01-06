@@ -430,11 +430,6 @@ is some type of non-C<Routine> C<Callable>.
 Returns the C<MoarVM:Profile::RoutineOverview> object associated with
 this C<Callable>.
 
-=head3 spesh
-
-Returns the C<MoarVM:Profile::SpeshOverview> object associated with
-this C<Callable>, if any.
-
 =head1 MoarVM::Profile::RoutineOverview
 
 An object containing some summary information about a
