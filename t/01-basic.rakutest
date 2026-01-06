@@ -66,7 +66,7 @@ for
 
     ok $entries        == $times,          'seen all calls made';
     ok $spesh-entries   < $entries,        'fewer spesh entries';
-    todo("$inlined-entries < $spesh-entries on Intel???");
+    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
     ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
     ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
 
@@ -103,7 +103,7 @@ for
     $spesh-entries   := $cs-overview.spesh-entries-total;
     $inlined-entries := $cs-overview.inlined-entries-total;
     ok $spesh-entries < $entries, 'spesh entries < total entries';
-note("$inlined-entries < $spesh-entries on Intel???");
+    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
     ok $inlined-entries < $spesh-entries, 'inlined entries < spesh entries';
     ok $cs-overview.osr-total == 1, 'only one on stack replacement done';
 
