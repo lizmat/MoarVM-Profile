@@ -485,7 +485,7 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 }
 
 #- Profile ---------------------------------------------------------------------
-class MoarVM::Profile:ver<0.0.1>:auth<zef:lizmat> {
+class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
     has $.db;
     has $!overview;
     has $!calls;

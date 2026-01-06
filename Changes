@@ -1,6 +1,8 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+
+0.0.2  2026-01-06T21:12:35+01:00
     - Add methods: files, names, user-files, user-names
     - Some documentation fixes and additions, Timo Paulssen++
     - Add 100% coverage testing
