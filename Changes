@@ -4,6 +4,12 @@ Revision history for MoarVM::Profile
     - Fix issue with apparently lazy queries
     - Rename method "overview" to "overviews" and actually
       document that method
+    - Add MoarVM::Profile::AllocationsOverview class and
+      add .allocations-overview method
+    - Give MoarVM::Profile a proper .gist method that mimics
+      the Overview page from the HTML version
+    - Add "$.target" attribute to Profile
+    - Add CLI interface to quickly run a profile: mvm-profile
 
 0.0.2  2026-01-06T21:12:35+01:00
     - Add methods: files, names, user-files, user-names

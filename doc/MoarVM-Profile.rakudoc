@@ -8,13 +8,52 @@ MoarVM::Profile - Raku interface to MoarVM profiles
 
 =begin code :lang<raku>
 use MoarVM::Profile;
-my $profile = MoarVM::Profile("foo.sql");  # generated SQL
-.say for $profile.routines.grep(*.is-user);
-# 2: <unit-outer> (-e:1)
-# 107: <unit> (-e:1)
-# 112: (block) (-e:1)
-# 113: foo (-e:1)
+my $profile = MoarVM::Profile(
+  'sub foo($a) { $a * $a }; foo($_) for ^1000000'
+);
+
+say $profile;
+# MoarVM Profiler Results
+# =======================
+# sub foo($a) { $a * $a }; foo($_) for ^1000000
+#
+# Time Spent
+# ==========
+# The profiled code ran for 153.19ms.
+# Of this, 25.44ms were spent in garbage collection (that's 16.61%).
+# The dynamic optimizer was active for 0.45% of the program's run time.
+#
+# Call Frames
+# ===========
+# In total, 5619 call frames were entered and exited by the profiled code.
+# Inlining eliminated the need to create 2997075 call frames (that's 99.81%).
+# 5240 call frames were interpreted, 2997454 were specialized (99.83%).
+#
+# Garbage Collection
+# ==================
+# The profiled code did 19 garbage collections.
+# There were 0 full collections involving the entire heap.
+# The average nursery collection time was 1.33ms.
+# Scalar replacement eliminated 999154 allocations (that's 33.28%).
+#
+# Dynamic Optimization
+# ====================
+# Of 2997454 optimized frames, there were 0 deoptimizations (that's 0%).
+# There was no global deoptimization triggered.
+# There was one On Stack Replacement performed.
 =end code
+
+or use the installed script B<mvm-profile>:
+
+=begin output
+$ mvm-profile 'sub foo($a) { $a * $a }; foo($_) for ^1000000'
+MoarVM Profiler Results
+=======================
+sub foo($a) { $a * $a }; foo($_) for ^1000000
+
+Time Spent
+...
+=end output
 
 =head1 DESCRIPTION
 
@@ -57,6 +96,11 @@ the ".db" extension.
 Creates the C<MoarVM::Profile> object from the given SQLite database.
 
 =head2 Methods
+
+=head2 allocations-overview
+
+Returns the C<MoarVM::Profile::AllocationsOverview> object associated
+with this profile.
 
 =head3 calls
 
@@ -155,6 +199,11 @@ my @routines := $profile.routines(:name<foo>, :file<-e>);
 Note that this also returns a C<List>, as multi subroutines /
 methods / tokens / rules / regex result in multiple matches.
 
+=head3 target
+
+The target with which this object was created (either a file, or code
+to be executed).
+
 =head3 types
 
 Returns a C<List> of C<MoarVM::Profile::Type> objects, where the index
@@ -220,6 +269,18 @@ ID of the associated C<MoarVM::Profile::Call> object.
 
 ID of the associated C<MoarVM::Profile::Type> object.
 
+=head1 MoarVM::Profile::AllocationOverview
+
+An object containing summary information about all calls in this profile.
+
+=head2 Methods
+
+=item allocated
+=item counted
+=item jitted
+=item replaced
+=item speshed
+
 =head1 MoarVM::Profile::Call
 
 An object containing information about a given call to a
@@ -262,7 +323,7 @@ The ID of this call.
 
 =head3 inclusive-time
 
-The number of nano seconds spent in the routine called 
+The number of nano seconds spent in the routine called
 B<including> the time spent in any calls made inside that routine.
 
 =head3 parent

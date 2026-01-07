@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 106 + 12;
+plan 5 * 111 + 12;
 
 my constant $times = 1000000;
 
@@ -70,6 +70,15 @@ for
     ok +$user-names,            'more than one user-code routine';
     is $user-names.tail, 'foo', 'the only named routine';
     is-deeply ([lt] $user-names), True, 'user routine names in ascending order';
+
+#- allocations-overview --------------------------------------------------------
+    my $al-overview := $profile.allocations-overview;
+    test-object-sanity $al-overview, MoarVM::Profile::AllocationsOverview;
+
+    ok $al-overview.counted,   'seen allocations';
+    ok $al-overview.speshed,   'seen speshed';
+    ok $al-overview.allocated, 'seen allocated';
+    ok $al-overview.replaced,  'seen replaced';
 
 #- deallocations ---------------------------------------------------------------
     my $deallocations := $profile.deallocations;

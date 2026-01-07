@@ -3,6 +3,9 @@ use v6.*;  # want nano
 use DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>;
 use JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>;
 
+#- constants -------------------------------------------------------------------
+
+#- subroutines -----------------------------------------------------------------
 my str @names = "";
 my %names = "" => 0;
 my sub name2index(str $name --> int) {
@@ -98,6 +101,23 @@ class MoarVM::Profile::Allocation does DefaultParts {
     method method-names() is implementation-detail {
         BEGIN <call-id type-id spesh jit count replaced>
     }
+}
+
+#- AllocationsOverview ---------------------------------------------------------
+class MoarVM::Profile::AllocationsOverview does DefaultParts {
+    method table(--> 'allocations') { }
+    method method-names() is implementation-detail {
+        BEGIN <counted speshed jitted allocated replaced> 
+    }
+    method select(--> Str:D) { q:to/SQL/ }
+SELECT
+  total(count),
+  total(spesh),
+  total(jit),
+  total(count + spesh + jit),
+  total(replaced)
+  FROM allocations
+SQL
 }
 
 #- Overview --------------------------------------------------------------------
@@ -335,6 +355,10 @@ SQL
     multi method gist(MoarVM::Profile::GCOverview:D: --> Str:D) {
         self.total-minor ?? gist(self) !! "(no garbage collections done)"
     }
+
+    method total(MoarVM::Profile::GCOverview:D: --> int) {
+        self.total-minor + self.total-major
+    }
 }
 
 #- RoutineOverview -------------------------------------------------------------
@@ -485,11 +509,13 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 }
 
 #- Profile creation ------------------------------------------------------------
-class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
+class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
+    has $.target;
     has $.db;
     has $!overviews;
     has $!calls;
     has $!calls-overview;
+    has $!allocations-overview;
     has $!deallocations;
     has $!gcs;
     has $!gc-overview;
@@ -503,46 +529,54 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
     has $!user-names;
 
     proto method new(|) {*}
-    multi method new(IO:D $io where .e && .extension eq 'db') {
-        self.bless(:db(DB::SQLite.new(:filename(~$io), |%_)))
+    multi method new(IO:D $target where .e && .extension eq 'db') {
+        self.bless(:$target, :db(DB::SQLite.new(:filename(~$target), |%_)))
     }
-    multi method new(IO:D $io where .e && .extension eq 'sql', :$create) {
-        my $filename := $create ?? ~$io.extension("db") !! "";
+    multi method new(IO:D $target where .e && .extension eq 'sql', :$create) {
+        my $filename := $create ?? ~$target.extension("db") !! "";
         my $db := DB::SQLite.new(:$filename, |%_);
-        $db.execute($io.slurp);
+        $db.execute($target.slurp);
 
-        self.bless(:$db)
+        self.bless(:$target, :$db)
     }
-    multi method new(IO:D $io where .e, :$create) {
+    multi method new(IO:D $target where .e, :$create) {
         my $sql := $*TMPDIR.add(nano ~ ".sql");
 
-        my $proc     := run-code($sql, $io);
-        my $filename := $create ?? $io.extension("db") !! "";
+        my $proc     := run-code($sql, $target);
+        my $filename := $create ?? $target.extension("db") !! "";
         my $db := DB::SQLite.new(:$filename, |%_);
         $db.execute($sql.slurp);
         $sql.unlink;
 
-        self.bless(:$db)
+        self.bless(:$target, :$db)
     }
-    multi method new(Str:D $code, |c) {
+    multi method new(Str:D $target, |c) {
 
         # We can't dispatch properly on IO(), so we catch anything here
         # that looks like a file that needs to be run / loaded
-        unless $code.contains(/\s/) {
-            return self.new($_, |c) if .e given $code.IO;
+        unless $target.contains(/\s/) {
+            return self.new($_, |c) if .e given $target.IO;
         }
 
         my $sql  := $*TMPDIR.add(nano ~ ".sql");
-        my $proc := run-code($sql, "-e", $code);
+        my $proc := run-code($sql, "-e", $target);
         my $db   := DB::SQLite.new(|c);
         $db.execute($sql.slurp);
 
-        self.bless(:$db)
+        self.bless(:$target, :$db)
     }
 
     method !map-routines(&mapper) { self.routines.map(&mapper).unique.List }
 
 #- Profile methods -------------------------------------------------------------
+    method allocations-overview(MoarVM::Profile:D:) {
+        $!allocations-overview // ($!allocations-overview :=
+          MoarVM::Profile::AllocationsOverview.new(
+            self.query(MoarVM::Profile::AllocationsOverview.select).array
+          )
+        )
+    }
+
     method calls(MoarVM::Profile:D: --> List:D) {
         $!calls // do {
             my @calls is default(Nil);
@@ -554,7 +588,7 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
         }
     }
 
-    method calls-overview(MoarVM::Profile:D:) is implementation-detail {
+    method calls-overview(MoarVM::Profile:D:) {
         $!calls-overview // ($!calls-overview :=
           MoarVM::Profile::CallsOverview.new(
             self.query(MoarVM::Profile::CallsOverview.select).array
@@ -582,6 +616,105 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
         ))
     }
 
+    multi method gist(MoarVM::Profile:D: :$bold --> Str:D) {
+        my str $BON  = $bold ?? "\e[1m"  !! "";
+        my str $BOFF = $bold ?? "\e[22m" !! "";
+
+        # Bold some texts if so indicated
+        my sub bold(Str() $text) { $BON ~ $text ~ $BOFF }
+
+        # Convert nano-seconds to milliseconds
+        my sub milli(Str() $nano) {
+            "$BON$nano.substr(0,*-3)\.$nano.substr(*-3,2)ms$BOFF"
+        }
+
+        # Convert to Rat to percentage
+        my sub percent(Rat:D $rat) {
+            $rat
+              ?? sprintf("$BON%.2f%%$BOFF", 100 * $rat)
+              !! $BON ~ "0%" ~ $BOFF
+        }
+
+        # Convert an Instant to a readable DateTime
+        my sub datetime(Instant:D $then) {
+            $then.DateTime.Str.subst(/ \.\d+ /)
+        }
+
+        my $overview   := self.overviews(1);
+        my $total-time := $overview.total-time;
+        my $spesh-time := $overview.spesh-time;
+
+        my $gc-overview   := self.gc-overview;
+        my $total-gc-time := $gc-overview.total;
+
+        my $calls-overview    := self.calls-overview;
+        my $calls-total       := $calls-overview.entries-total;
+        my $spesh-total       := $calls-overview.spesh-entries-total;
+        my $inlined-total     := $calls-overview.inlined-entries-total;
+        my $jit-total         := $calls-overview.jit-entries-total;
+        my $entered-total     := $calls-total - $inlined-total;
+        my $interpreted-total := $calls-total - $spesh-total;
+        my $spesh-jit-total   := $spesh-total + $jit-total;
+        my $osr-total         := $calls-overview.osr-total;
+        my $deopt-one-total   := $calls-overview.deopt-one-total;
+        my $deopt-all-total   := $calls-overview.deopt-all-total;
+
+        my $gcs := self.gcs;
+
+        my $allocations-overview := self.allocations-overview;
+        my $replaced  := $allocations-overview.replaced;
+        my $allocated := $allocations-overview.allocated - $replaced;
+
+        my str @parts;
+        my sub add(str $text) { @parts.push($text) }
+
+        add "MoarVM Profiler Results";
+        add "=======================";
+        add $!target ~~ IO
+          ?? $!target.extension eq 'db' | 'sql'
+            ?? "&bold($!target) (created &datetime($!target.created))"
+            !! "&bold($!target) (changed &datetime($!target.changed))"
+          !! bold($!target);
+
+        add "";
+        add "Time Spent";
+        add "==========";
+        add "The profiled code ran for &milli($total-time).";
+        add "Of this, &milli($total-gc-time) were spent in garbage collection (that's &percent($total-gc-time / $total-time)).";
+        add "The dynamic optimizer was active for &percent($spesh-time / $total-time) of the program's run time.";
+
+        add "";
+        add "Call Frames";
+        add "===========";
+        add "In total, &bold("$entered-total call frames") were entered and exited by the profiled code.";
+        add "Inlining eliminated the need to create &bold("$inlined-total call frames") (that's &percent($inlined-total / $calls-total)).";
+        add "&bold($interpreted-total) call frames were interpreted, &bold($spesh-total) were specialized (&percent($spesh-total / $calls-total)).";
+
+        add "";
+        add "Garbage Collection";
+        add "==================";
+        add "The profiled code did &bold("$gcs.elems() garbage collections").";
+        add "There were &bold("$gcs.grep(*.full).elems() full collections") involving the entire heap.";
+        add "The average nursery collection time was &milli($gc-overview.avg-minor-time).";
+        add "Scalar replacement eliminated &bold($replaced) allocations (that's &percent($replaced / $allocated)).";
+
+        add "";
+        add "Dynamic Optimization";
+        add "====================";
+        add "Of $spesh-jit-total optimized frames, there were &bold("$deopt-one-total deoptimizations") (that's &percent($deopt-one-total / $spesh-jit-total)).";
+        add $deopt-all-total
+          ?? $deopt-all-total == 1
+            ?? "There was &bold("one global deoptimization")."
+            !! "There were &bold("$deopt-all-total global deoptimizations")."
+          !! "There was &bold("no global deoptimization") triggered.";
+        add $osr-total == 1
+          ?? "There was &bold("one On Stack Replacement") performed."
+          !! "There were &bold("$osr-total On Stack Replacements") performed.";
+
+        add "";
+        @parts.join("\n")
+    }
+
     method files(MoarVM::Profile:D:) {
         $!files // ($!files := @names[self!map-routines({
             if .file-index -> $index { $index }
@@ -596,7 +729,7 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
 
     method overviews(MoarVM::Profile:D: $thread-id?) {
         with $thread-id {
-            self.overviews.first(*.thread-id == 1)
+            self.overviews.first(*.thread-id == $thread-id)
         }
         else {
             $!overviews // ($!overviews :=
@@ -614,11 +747,6 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
 #say $query;  # for debugging
         $!db.query($query, |c)
     }
-
-#    method report(MoarVM::Profile:D: --> Str:D) {
-#        my str @parts;
-#
-#    }
 
     method routines(MoarVM::Profile:D: --> List:D) {
         if %_ {

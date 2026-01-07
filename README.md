@@ -10,13 +10,50 @@ SYNOPSIS
 
 ```raku
 use MoarVM::Profile;
-my $profile = MoarVM::Profile("foo.sql");  # generated SQL
-.say for $profile.routines.grep(*.is-user);
-# 2: <unit-outer> (-e:1)
-# 107: <unit> (-e:1)
-# 112: (block) (-e:1)
-# 113: foo (-e:1)
+my $profile = MoarVM::Profile(
+  'sub foo($a) { $a * $a }; foo($_) for ^1000000'
+);
+
+say $profile;
+# MoarVM Profiler Results
+# =======================
+# sub foo($a) { $a * $a }; foo($_) for ^1000000
+#
+# Time Spent
+# ==========
+# The profiled code ran for 153.19ms.
+# Of this, 25.44ms were spent in garbage collection (that's 16.61%).
+# The dynamic optimizer was active for 0.45% of the program's run time.
+#
+# Call Frames
+# ===========
+# In total, 5619 call frames were entered and exited by the profiled code.
+# Inlining eliminated the need to create 2997075 call frames (that's 99.81%).
+# 5240 call frames were interpreted, 2997454 were specialized (99.83%).
+#
+# Garbage Collection
+# ==================
+# The profiled code did 19 garbage collections.
+# There were 0 full collections involving the entire heap.
+# The average nursery collection time was 1.33ms.
+# Scalar replacement eliminated 999154 allocations (that's 33.28%).
+#
+# Dynamic Optimization
+# ====================
+# Of 2997454 optimized frames, there were 0 deoptimizations (that's 0%).
+# There was no global deoptimization triggered.
+# There was one On Stack Replacement performed.
 ```
+
+or use the installed script **mvm-profile**:
+
+    $ mvm-profile 'sub foo($a) { $a * $a }; foo($_) for ^1000000'
+    MoarVM Profiler Results
+    =======================
+    sub foo($a) { $a * $a }; foo($_) for ^1000000
+
+    Time Spent
+    ...
 
 DESCRIPTION
 ===========
@@ -48,6 +85,11 @@ Creates the `MoarVM::Profile` object from the given SQLite database.
 
 Methods
 -------
+
+allocations-overview
+--------------------
+
+Returns the `MoarVM::Profile::AllocationsOverview` object associated with this profile.
 
 ### calls
 
@@ -138,6 +180,10 @@ my @routines := $profile.routines(:name<foo>, :file<-e>);
 
 Note that this also returns a `List`, as multi subroutines / methods / tokens / rules / regex result in multiple matches.
 
+### target
+
+The target with which this object was created (either a file, or code to be executed).
+
 ### types
 
 Returns a `List` of `MoarVM::Profile::Type` objects, where the index of the object is the same as the `.id` of the object.
@@ -201,6 +247,24 @@ ID of the associated `MoarVM::Profile::Call` object.
 ### type-id
 
 ID of the associated `MoarVM::Profile::Type` object.
+
+MoarVM::Profile::AllocationOverview
+===================================
+
+An object containing summary information about all calls in this profile.
+
+Methods
+-------
+
+  * allocated
+
+  * counted
+
+  * jitted
+
+  * replaced
+
+  * speshed
 
 MoarVM::Profile::Call
 =====================
