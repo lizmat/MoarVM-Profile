@@ -25,4 +25,4 @@ jobs:
       - name: Install Dependencies
         run: zef install --/test --test-depends --deps-only .
       - name: Install module
-        run: zef install --verbose .
+        run: zef install --verbose --/test .
