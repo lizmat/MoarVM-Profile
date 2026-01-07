@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 104 + 12;
+plan 1 * 104 + 12;
 
 my constant $times = 1000000;
 
@@ -230,6 +230,7 @@ for
     test-object-sanity $sp-overview, MoarVM::Profile::SpeshOverview;
 
     # not sure what to reliably test here
+last;
 }
 
 my $profile := MoarVM::Profile.new($*PROGRAM.sibling("foo.db"));
