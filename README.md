@@ -384,15 +384,23 @@ An object containing overview information about this profile.
 Methods
 -------
 
-  * first-entry-time
-
-  * parent-thread-id
-
   * root-node
 
-  * spesh-time
+### first-entry-time
 
-  * thread-id
+The time profiling was started.
+
+### parent-thread-id
+
+The ID of the thread that initiated (**0** if no parent thread known).
+
+### spesh-time
+
+The amount of time spent by spesh.
+
+### thread-id
+
+The ID of the thread of this information.
 
 ### total-time
 

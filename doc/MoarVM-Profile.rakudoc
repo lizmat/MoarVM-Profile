@@ -383,11 +383,23 @@ An object containing overview information about this profile.
 
 =head2 Methods
 
-=item first-entry-time
-=item parent-thread-id
 =item root-node
-=item spesh-time
-=item thread-id
+
+=head3 first-entry-time
+
+The time profiling was started.
+
+=head3 parent-thread-id
+
+The ID of the thread that initiated (B<0> if no parent thread known).
+
+=head3 spesh-time
+
+The amount of time spent by spesh.
+
+=head3 thread-id
+
+The ID of the thread of this information.
 
 =head3 total-time
 

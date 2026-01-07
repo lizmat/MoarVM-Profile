@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 102 + 12;
+plan 5 * 104 + 12;
 
 my constant $times = 1000000;
 
@@ -37,7 +37,9 @@ for
 
     ok $overview.total-time,     'some time was spent indeed';
     ok $overview.spesh-time,     'some time was spent in spesh indeed';
-    ok $overview.thread-id == 1, 'and only one thread active';
+    ok $overview.thread-id        == 1, 'and only one thread active';
+    ok $overview.parent-thread-id == 0, 'without a parent';
+    ok $overview.first-entry-time == 0, 'only one profile';
 
 #- files -----------------------------------------------------------------------
     my $file-names := $profile.files;
@@ -104,7 +106,7 @@ for
 
     ok $entries        == $times,          'seen all calls made';
     ok $spesh-entries   < $entries,        'fewer spesh entries';
-    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
+#    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
     ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
     ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
 
@@ -154,7 +156,7 @@ for
     $spesh-entries   := $cs-overview.spesh-entries-total;
     $inlined-entries := $cs-overview.inlined-entries-total;
     ok $spesh-entries < $entries, 'spesh entries < total entries';
-    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
+#    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
     ok $inlined-entries < $spesh-entries, 'inlined entries < spesh entries';
     ok $cs-overview.osr-total == 1, 'only one on stack replacement done';
 
@@ -232,11 +234,9 @@ for
 
 my $profile := MoarVM::Profile.new($*PROGRAM.sibling("foo.db"));
 is $profile.routines.head.name, '(block)', 'an unnamed routine';
-dies-ok { $profile.query("this is not a SQL query") }, 'a wrong SQL query dies';
+dies-ok { $profile.query("not a valid SQL query") }, 'a wrong SQL query dies';
 dies-ok { $profile.routines(:foo<bar>) }, 'unhandled named arg in routines';
 dies-ok { $profile.types(:foo<bar>) },    'unhandled named arg in types';
-
-say $profile.routines.head;
 
 for
   {:name<foo>,},
