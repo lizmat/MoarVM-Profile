@@ -28,7 +28,11 @@ for
   'db',   $*PROGRAM.sibling("foo.db"),    '-e'
 -> $source, $target, $file {
     diag "Testing profile from $source";
+
+%*ENV<MVM_SPESH_LOG> = "spesh.log";
     my $profile := MoarVM::Profile.new($target);
+note "spesh.log".IO.slurp;
+exit 1;
     isa-ok $profile, MoarVM::Profile;
     isa-ok $profile.gist, Str;
 
