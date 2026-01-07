@@ -1,6 +1,8 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+
+0.0.3  2026-01-07T22:32:14+01:00
     - Fix issue with apparently lazy queries
     - Rename method "overview" to "overviews" and actually
       document that method
