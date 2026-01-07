@@ -1,5 +1,5 @@
 use MoarVM::Profile;
 
-note MoarVM::Profile.new(~@*ARGS).gist(:bold($*OUT.t));
+say MoarVM::Profile.new(~@*ARGS).gist(:bold($*OUT.t));
 
 # vim: expandtab shiftwidth=4
