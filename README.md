@@ -98,6 +98,20 @@ Returns a `List` of `MoarVM::Profile::GC` objects, one for each garbage collecti
 
 Returns a sorted `List` of routine names found in this profile.
 
+### overviews
+
+Returns a `List` of `MoarVM::Profile::Overview` objects, one for each thread.
+
+```raku
+.say for $profile.overviews;
+```
+
+Can also be called with a thread ID, to just return the `MoarVM::Profile::Overview` object for that thread.
+
+```raku
+say $profile.overviews[1];
+```
+
 ### query
 
 Perform a SQL query on the database associated with the profile.

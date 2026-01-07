@@ -484,10 +484,10 @@ class MoarVM::Profile::Deallocation does DefaultParts {
     }
 }
 
-#- Profile ---------------------------------------------------------------------
+#- Profile creation ------------------------------------------------------------
 class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
     has $.db;
-    has $!overview;
+    has $!overviews;
     has $!calls;
     has $!calls-overview;
     has $!deallocations;
@@ -540,22 +540,9 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
         self.bless(:$db)
     }
 
-    method query(MoarVM::Profile:D: Str:D $query, |c) {
-        CATCH {
-            note $query.chomp;
-            .rethrow;
-        }
-#say $query;  # for debugging
-        $!db.query($query, |c)
-    }
+    method !map-routines(&mapper) { self.routines.map(&mapper).unique.List }
 
-    method overview(MoarVM::Profile:D:) {
-        $!overview
-          // ($!overview := MoarVM::Profile::Overview.new(
-               self.query(MoarVM::Profile::Overview.select).array
-             ))
-    }
-
+#- Profile methods -------------------------------------------------------------
     method calls(MoarVM::Profile:D: --> List:D) {
         $!calls // do {
             my @calls is default(Nil);
@@ -567,27 +554,32 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
         }
     }
 
+    method calls-overview(MoarVM::Profile:D:) is implementation-detail {
+        $!calls-overview // ($!calls-overview :=
+          MoarVM::Profile::CallsOverview.new(
+            self.query(MoarVM::Profile::CallsOverview.select).array
+          )
+        )
+    }
+
     method deallocations(MoarVM::Profile:D: --> List:D) {
-        $!deallocations // do {
-            $!deallocations := self.query(MoarVM::Profile::Deallocation.select).arrays.map({
-                MoarVM::Profile::Deallocation.new($_)
-            }).List
-        }
+        $!deallocations // ($!deallocations :=
+          self.query(MoarVM::Profile::Deallocation.select).arrays.map({
+              MoarVM::Profile::Deallocation.new($_)
+          }).eager)
     }
 
     method gcs(MoarVM::Profile:D: --> List:D) {
-        $!gcs // do {
-            $!gcs := self.query(MoarVM::Profile::GC.select).arrays.map({
-                MoarVM::Profile::GC.new($_)
-            }).List
-        }
+        $!gcs // ($!gcs :=
+          self.query(MoarVM::Profile::GC.select).arrays.map({
+              MoarVM::Profile::GC.new($_)
+          }).eager)
     }
 
     method gc-overview(MoarVM::Profile:D: --> MoarVM::Profile::GCOverview:D) {
-        $!gc-overview
-          // ($!gc-overview := MoarVM::Profile::GCOverview.new(
-               self.query(MoarVM::Profile::GCOverview.select).array
-             ))
+        $!gc-overview // ($!gc-overview := MoarVM::Profile::GCOverview.new(
+          self.query(MoarVM::Profile::GCOverview.select).array
+        ))
     }
 
     method files(MoarVM::Profile:D:) {
@@ -602,21 +594,31 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
         })].sort(*.fc).List)
     }
 
-    method user-files(MoarVM::Profile:D:) {
-        $!user-files // ($!user-files := @names[self!map-routines({
-            if .is-user && .file-index -> $index { $index }
-        })].sort(*.fc).List)
+    method overviews(MoarVM::Profile:D: $thread-id?) {
+        with $thread-id {
+            self.overviews.first(*.thread-id == 1)
+        }
+        else {
+            $!overviews // ($!overviews :=
+              self.query(MoarVM::Profile::Overview.select).arrays.map({
+                  MoarVM::Profile::Overview.new($_)
+              }).eager)
+        }
     }
 
-    method user-names(MoarVM::Profile:D:) {
-        $!user-names // ($!user-names := @names[self!map-routines({
-            if .is-user && .name-index -> $index { $index }
-        })].sort(*.fc).List)
+    method query(MoarVM::Profile:D: Str:D $query, |c) {
+        CATCH {
+            note $query.chomp;
+            .rethrow;
+        }
+#say $query;  # for debugging
+        $!db.query($query, |c)
     }
 
-    method !map-routines(&mapper) {
-        self.routines.map(&mapper).unique.List
-    }
+#    method report(MoarVM::Profile:D: --> Str:D) {
+#        my str @parts;
+#
+#    }
 
     method routines(MoarVM::Profile:D: --> List:D) {
         if %_ {
@@ -671,14 +673,6 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
         }
     }
 
-    method calls-overview(MoarVM::Profile:D:) is implementation-detail {
-        $!calls-overview // do {
-            $!calls-overview := MoarVM::Profile::CallsOverview.new(
-              self.query(MoarVM::Profile::CallsOverview.select).array
-            )
-        }
-    }
-
     method routine-overviews(MoarVM::Profile:D:) is implementation-detail {
         $!routine-overviews // do {
             my @overviews is default(Nil);
@@ -694,7 +688,7 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
         $!spesh-overviews // ($!spesh-overviews :=
           self.query(MoarVM::Profile::SpeshOverview.select).arrays.map({
               MoarVM::Profile::SpeshOverview.new($_);
-          }).List)
+          }).eager)
     }
 
     method types(MoarVM::Profile:D: --> List:D) {
@@ -718,6 +712,18 @@ class MoarVM::Profile:ver<0.0.2>:auth<zef:lizmat> {
             }
             $!types := @types.List
         }
+    }
+
+    method user-files(MoarVM::Profile:D:) {
+        $!user-files // ($!user-files := @names[self!map-routines({
+            if .is-user && .file-index -> $index { $index }
+        })].sort(*.fc).List)
+    }
+
+    method user-names(MoarVM::Profile:D:) {
+        $!user-names // ($!user-names := @names[self!map-routines({
+            if .is-user && .name-index -> $index { $index }
+        })].sort(*.fc).List)
     }
 }
 

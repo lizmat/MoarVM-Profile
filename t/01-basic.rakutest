@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 104 + 12;
+plan 5 * 106 + 12;
 
 my constant $times = 1000000;
 
@@ -33,7 +33,11 @@ for
     isa-ok $profile, MoarVM::Profile;
     isa-ok $profile.gist, Str;
 
-    my $overview := $profile.overview;
+    my $overviews := $profile.overviews;
+    isa-ok $overviews, List;
+    ok +$overviews, 'Must have at least one overview';
+
+    my $overview := $profile.overviews(1);  # the only user thread
     test-object-sanity $overview, MoarVM::Profile::Overview;
 
     ok $overview.total-time,     'some time was spent indeed';

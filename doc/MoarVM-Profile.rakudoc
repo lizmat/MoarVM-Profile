@@ -113,6 +113,22 @@ garbage collection run having been done.
 
 Returns a sorted C<List> of routine names found in this profile.
 
+=head3 overviews
+
+Returns a C<List> of C<MoarVM::Profile::Overview> objects, one for
+each thread.
+
+=begin code :lang<raku>
+.say for $profile.overviews;
+=end code
+
+Can also be called with a thread ID, to just return the
+C<MoarVM::Profile::Overview> object for that thread.
+
+=begin code :lang<raku>
+say $profile.overviews[1];
+=end code
+
 =head3 query
 
 Perform a SQL query on the database associated with the profile.
