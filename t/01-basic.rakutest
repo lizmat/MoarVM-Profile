@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 1 * 104 + 12;
+plan 5 * 104 + 12;
 
 my constant $times = 1000000;
 
@@ -29,10 +29,7 @@ for
 -> $source, $target, $file {
     diag "Testing profile from $source";
 
-%*ENV<MVM_SPESH_LOG> = "spesh.log";
     my $profile := MoarVM::Profile.new($target);
-note "spesh.log".IO.slurp;
-exit 1;
     isa-ok $profile, MoarVM::Profile;
     isa-ok $profile.gist, Str;
 
@@ -110,7 +107,7 @@ exit 1;
 
     ok $entries        == $times,          'seen all calls made';
     ok $spesh-entries   < $entries,        'fewer spesh entries';
-#    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
+    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
     ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
     ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
 
@@ -160,7 +157,7 @@ exit 1;
     $spesh-entries   := $cs-overview.spesh-entries-total;
     $inlined-entries := $cs-overview.inlined-entries-total;
     ok $spesh-entries < $entries, 'spesh entries < total entries';
-#    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
+    todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
     ok $inlined-entries < $spesh-entries, 'inlined entries < spesh entries';
     ok $cs-overview.osr-total == 1, 'only one on stack replacement done';
 
@@ -234,7 +231,6 @@ exit 1;
     test-object-sanity $sp-overview, MoarVM::Profile::SpeshOverview;
 
     # not sure what to reliably test here
-last;
 }
 
 my $profile := MoarVM::Profile.new($*PROGRAM.sibling("foo.db"));
