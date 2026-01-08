@@ -1,6 +1,8 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+
+0.0.4  2026-01-08T22:51:25+01:00
     - Add exported "file2io" subroutine
     - Add methods Profile.ios/user-ios
     - Add methods Routine.io/source/lines-around
