@@ -118,7 +118,7 @@ Returns a `List` of `MoarVM::Profile::Deallocation` objects, one for each deallo
 
 ### files
 
-Returns a sorted `List` of file names found in this profile.
+Returns a sorted `List` of "paths" found in this profile. Note these can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file (see `.ios`).
 
 ### gc-overview
 
@@ -135,6 +135,10 @@ Returns a `List` of `MoarVM::Profile::GC` objects, one for each garbage collecti
 ```raku
 .say for $profile.gcs;
 ```
+
+### ios
+
+Returns a `List` of `IO::Path` objects for all the files, in the same order as the `.files` method.
 
 ### names
 
@@ -182,7 +186,7 @@ Note that this also returns a `List`, as multi subroutines / methods / tokens / 
 
 ### target
 
-The target with which this object was created (either a file, or code to be executed).
+The target with which this object was created: either a path (string or `IO::Path`), or code to be executed.
 
 ### types
 
@@ -194,7 +198,11 @@ my $type := $profile.types[$type-id];
 
 ### user-files
 
-Returns a sorted `List` of user file names found in this profile.
+Returns a sorted `List` of absolute paths of user files found in this profile.
+
+### user-ios
+
+Returns a `List` of `IO::Path` objects for all the user files, in the same order as the `.user-files` method.
 
 ### user-names
 
@@ -494,17 +502,17 @@ How the `MoarVM::Routine` object is created, is an implementation detail and as 
 Methods
 -------
 
-### id
-
-The numerical ID of the `Callable` in this profile.
-
 ### calls
 
 Returns a `List` of `MoarVM::Profile::Call` objects for each call from a different location made to this `Callable`.
 
-### file
+### id
 
-The file in which the `Callable` has been defined. Note this can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file.
+The numerical ID of the `Callable` in this profile.
+
+### io
+
+The normalized `IO::Path` of the file in which this `Callable` was defined.
 
 ### is-block
 
@@ -518,9 +526,24 @@ Returns `True` if the `Callable` is part of the Rakudo core.
 
 Returns `True` if the `Callable` is user-supplied code.
 
+### file
+
+The file in which the `Callable` has been defined. Note this can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file.
+
 ### line
 
 The line number in which the `Callable` has been defined (if available). **-1** if no line number could be obtained (which is typical of some low level code blocks).
+
+### lines-around
+
+```raku
+say $routine.lines-around;      # 3 lines before / after
+say $routine.lines-around(10);  # 10 lines before / after
+```
+
+If there is `.source` available, then this will by default return the source code **3** lines before and after the line in which the `Callable` begins to be defined. Another number of lines can be specified with the positional argument.
+
+If there is no `.source` available, `Nil` will be returned.
 
 ### name
 
@@ -529,6 +552,10 @@ The name of the `Callable`, "(block)" if there is no name, implying this is some
 ### overview
 
 Returns the `MoarVM:Profile::RoutineOverview` object associated with this `Callable`.
+
+### source
+
+Returns the complete source of the file of this `Callable` if available. If the profile was created with just code, then that will returned. Else `Nil` will be returned.
 
 MoarVM::Profile::RoutineOverview
 ================================
@@ -625,6 +652,20 @@ The name of the this type.
 ### type-links
 
 A `Map` with extra information about this links to other types.
+
+EXPORTED SUBROUTINES
+====================
+
+file2io
+-------
+
+```raku
+say file2io("SETTING::src/core.c/Int.rakumod");
+```
+
+Looks at the `file` value (as returned by `MoarVM::Profile::Routine.file` method or the `MoarVM::Profile.files` method) and attempt to convert this to an `IO::Path` of an existing path, taking into account path indicators such as "SETTING::" and "NQP::".
+
+If no valid path is found (like for "-e"), a `Failure` is returned.
 
 CREDITS
 =======

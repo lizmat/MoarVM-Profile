@@ -1,6 +1,9 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+    - Add exported "file2io" subroutine
+    - Add methods Profile.ios/user-ios
+    - Add methods Routine.io/source/lines-around
 
 0.0.3  2026-01-07T22:32:14+01:00
     - Fix issue with apparently lazy queries

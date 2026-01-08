@@ -132,7 +132,9 @@ each deallocation having been done.
 
 =head3 files
 
-Returns a sorted C<List> of file names found in this profile.
+Returns a sorted C<List> of "paths" found in this profile.  Note these
+can have special path indicators such as "SETTING::" and "NQP::", so
+there's no direct path to an actual file (see C<.ios>).
 
 =head3 gc-overview
 
@@ -152,6 +154,11 @@ garbage collection run having been done.
 =begin code :lang<raku>
 .say for $profile.gcs;
 =end code
+
+=head3 ios
+
+Returns a C<List> of C<IO::Path> objects for all the files, in the
+same order as the C<.files> method.
 
 =head3 names
 
@@ -201,8 +208,8 @@ methods / tokens / rules / regex result in multiple matches.
 
 =head3 target
 
-The target with which this object was created (either a file, or code
-to be executed).
+The target with which this object was created: either a path
+(string or C<IO::Path>), or code to be executed.
 
 =head3 types
 
@@ -215,7 +222,13 @@ my $type := $profile.types[$type-id];
 
 =head3 user-files
 
-Returns a sorted C<List> of user file names found in this profile.
+Returns a sorted C<List> of absolute paths of user files found in this
+profile.
+
+=head3 user-ios
+
+Returns a C<List> of C<IO::Path> objects for all the user files, in
+the same order as the C<.user-files> method.
 
 =head3 user-names
 
@@ -495,20 +508,19 @@ and as such not documented.
 
 =head2 Methods
 
-=head3 id
-
-The numerical ID of the C<Callable> in this profile.
-
 =head3 calls
 
 Returns a C<List> of C<MoarVM::Profile::Call> objects for each call from
 a different location made to this C<Callable>.
 
-=head3 file
+=head3 id
 
-The file in which the C<Callable> has been defined.  Note this can have
-special path indicators such as "SETTING::" and "NQP::", so there's no
-direct path to an actual file.
+The numerical ID of the C<Callable> in this profile.
+
+=head3 io
+
+The normalized C<IO::Path> of the file in which this C<Callable> was
+defined.
 
 =head3 is-block
 
@@ -522,11 +534,31 @@ Returns C<True> if the C<Callable> is part of the Rakudo core.
 
 Returns C<True> if the C<Callable> is user-supplied code.
 
+=head3 file
+
+The file in which the C<Callable> has been defined.  Note this can have
+special path indicators such as "SETTING::" and "NQP::", so there's no
+direct path to an actual file.
+
 =head3 line
 
 The line number in which the C<Callable> has been defined (if available).
 B<-1> if no line number could be obtained (which is typical of some low
 level code blocks).
+
+=head3 lines-around
+
+=begin code :lang<raku>
+say $routine.lines-around;      # 3 lines before / after
+say $routine.lines-around(10);  # 10 lines before / after
+=end code
+
+If there is C<.source> available, then this will by default return
+the source code B<3> lines before and after the line in which the
+C<Callable> begins to be defined.  Another number of lines can be
+specified with the positional argument.
+
+If there is no C<.source> available, C<Nil> will be returned.
 
 =head3 name
 
@@ -537,6 +569,12 @@ is some type of non-C<Routine> C<Callable>.
 
 Returns the C<MoarVM:Profile::RoutineOverview> object associated with
 this C<Callable>.
+
+=head3 source
+
+Returns the complete source of the file of this C<Callable> if available.
+If the profile was created with just code, then that will returned.  Else
+C<Nil> will be returned.
 
 =head1 MoarVM::Profile::RoutineOverview
 
@@ -620,6 +658,21 @@ The name of the this type.
 =head3 type-links
 
 A C<Map> with extra information about this links to other types.
+
+=head1 EXPORTED SUBROUTINES
+
+=head2 file2io
+
+=begin code :lang<raku>
+say file2io("SETTING::src/core.c/Int.rakumod");
+=end code
+
+Looks at the C<file> value (as returned by C<MoarVM::Profile::Routine.file>
+method or the C<MoarVM::Profile.files> method) and attempt to convert this
+to an C<IO::Path> of an existing path, taking into account path indicators
+such as "SETTING::" and "NQP::".
+
+If no valid path is found (like for "-e"), a C<Failure> is returned.
 
 =head1 CREDITS
 

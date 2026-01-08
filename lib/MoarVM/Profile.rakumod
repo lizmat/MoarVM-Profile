@@ -3,9 +3,7 @@ use v6.*;  # want nano
 use DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>;
 use JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>;
 
-#- constants -------------------------------------------------------------------
-
-#- subroutines -----------------------------------------------------------------
+#- private subroutines ---------------------------------------------------------
 my str @names = "";
 my %names = "" => 0;
 my sub name2index(str $name --> int) {
@@ -47,6 +45,20 @@ my sub run-code($file, *@args) {
     }
 
     $proc
+}
+
+#- exported subroutines --------------------------------------------------------
+my $SETTING-root = $*EXECUTABLE.parent(3);
+my sub file2io(str $target) is export {
+    (my $io := $target.IO).e
+      ?? $io
+      !! $target.starts-with('SETTING::')
+        ?? $SETTING-root.add($target.substr(9))
+        !! $target.starts-with('src/main.nqp' | 'src/Perl6' | 'src/vm')
+          ?? $SETTING-root.add($target)
+          !! $target.starts-with('NQP::')
+            ?? $SETTING-root.add("nqp", $target.substr(5))
+            !! "Could not normalize '$target' to an existing path".Failure
 }
 
 #- DefaultParts ----------------------------------------------------------------
@@ -458,7 +470,8 @@ class MoarVM::Profile::Routine {
             '(block)'  # UNCOVERABLE
         }
     }
-    method file(MoarVM::Profile::Routine:D: --> str) { @names[@!parts[3]] }
+    method file(MoarVM::Profile::Routine:D: --> str ) { @names[@!parts[3]] }
+    method io(  MoarVM::Profile::Routine:D: --> IO:D) { file2io self.file  }
 
     method is-block(MoarVM::Profile::Routine:D: --> Bool:D) { @!parts[1] == 0 }
 
@@ -483,6 +496,33 @@ class MoarVM::Profile::Routine {
         $!calls // do {
             my int $id = self.id;
             $!calls := $!profile.calls.grep(*.routine-id == $id).List
+        }
+    }
+
+    method source(MoarVM::Profile::Routine:D:) {
+        if self.io -> $io {
+            $io.slurp
+        }
+        else {
+            (my $target := $!profile.target) ~~ IO::Path
+              ?? Nil   # either .sql or .db without known source
+              !! $target
+        }
+    }
+
+    method lines-around(MoarVM::Profile::Routine:D: int $extra = 3) {
+        if self.source -> $source {
+            my @lines = $source.lines(:!chomp);
+            my int $line = $.line;
+            my int $from = $line - $extra max 1;
+            my int $to   = $line + $extra min +@lines;
+            
+            ($from .. $to).map(-> $line {
+                "$line.fmt("\%$to.chars()d") @lines[$line - 1]"
+            }).join
+        }
+        else {
+            Nil
         }
     }
 }
@@ -524,8 +564,10 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
     has $!spesh-overviews;
     has $!types;
     has $!files;
+    has $!ios;
     has $!names;
     has $!user-files;
+    has $!user-ios;
     has $!user-names;
 
     proto method new(|) {*}
@@ -539,7 +581,7 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
 
         self.bless(:$target, :$db)
     }
-    multi method new(IO:D $target where .e, :$create) {
+    multi method new(IO:D $target where .e, :$create, :$actual-target) {
         my $sql := $*TMPDIR.add(nano ~ ".sql");
 
         my $proc     := run-code($sql, $target);
@@ -548,14 +590,15 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
         $db.execute($sql.slurp);
         $sql.unlink;
 
-        self.bless(:$target, :$db)
+        self.bless(:target($actual-target // $target), :$db)
     }
     multi method new(Str:D $target, |c) {
 
         # We can't dispatch properly on IO(), so we catch anything here
         # that looks like a file that needs to be run / loaded
         unless $target.contains(/\s/) {
-            return self.new($_, |c) if .e given $target.IO;
+            return self.new($_, |c, :actual-target($target))
+              if .e given $target.IO;
         }
 
         my $sql  := $*TMPDIR.add(nano ~ ".sql");
@@ -721,6 +764,10 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
         })].sort(*.fc).List)
     }
 
+    method ios(MoarVM::Profile:D:) {
+        $!ios // ($!ios := self.files.map(&file2io).List)
+    }
+
     method names(MoarVM::Profile:D:) {
         $!names // ($!names := @names[self!map-routines({
             if .name-index -> $index { $index }
@@ -751,9 +798,9 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
     method routines(MoarVM::Profile:D: --> List:D) {
         if %_ {
             my @routines := self.routines;
-            if %_<name> andthen %names{$_} -> int $name-index {
-                if %_<file> andthen %names{$_} -> int $file-index {
-                    if %_<line> -> int $line {
+            if %_<name>:delete andthen %names{$_} -> int $name-index {
+                if %_<file>:delete andthen %names{$_} -> int $file-index {
+                    if %_<line>:delete -> int $line {
                         return @routines.grep({
                             .defined
                               && .name-index == $name-index
@@ -775,8 +822,8 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
                     }).List;
                 }
             }
-            if %_<file> andthen %names{$_} -> int $index {
-                if %_<line> -> int $line {
+            if %_<file>:delete andthen %names{$_} -> int $index {
+                if %_<line>:delete -> int $line {
                     return @routines.grep({
                         .defined && .file-index == $index && .line == $line
                     }).List;
@@ -788,7 +835,9 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
                 }
             }
 
-            die "Unhandled combination of arguments: %_.raku()";
+            %_
+              ?? (die "Unhandled combination of arguments: %_.raku()")
+              !! return ()
         }
 
         $!routines // do {
@@ -846,6 +895,10 @@ class MoarVM::Profile:ver<0.0.3>:auth<zef:lizmat> {
         $!user-files // ($!user-files := @names[self!map-routines({
             if .is-user && .file-index -> $index { $index }
         })].sort(*.fc).List)
+    }
+
+    method user-ios(MoarVM::Profile:D:) {
+        $!user-ios // ($!user-ios := self.user-files.map(&file2io).List)
     }
 
     method user-names(MoarVM::Profile:D:) {

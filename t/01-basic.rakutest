@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 111 + 12;
+plan 5 * 120 + 16;
 
 my constant $times = 1000000;
 
@@ -20,18 +20,22 @@ my sub test-object-sanity($object, $type) is test-assertion {
 
 #- profile ---------------------------------------------------------------------
 my $foo-raku := $*PROGRAM.sibling("foo.raku");
+my $code     := qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times\n/;
+my $around   := qq/1 sub foo(\$a) \{ \$a * \$a }\n2 foo(\$_) for ^$times\n/;
+
 for
-  'code', qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times/, '-e',
+  'code', $code,      '-e',
   'io',   $foo-raku,  ~$foo-raku,
   'path', ~$foo-raku, ~$foo-raku,
-  'SQL',  $*PROGRAM.sibling("foo.sql"),   '-e',
-  'db',   $*PROGRAM.sibling("foo.db"),    '-e'
+  'SQL',  $*PROGRAM.sibling("foo.sql"), '-e',
+  'db',   $*PROGRAM.sibling("foo.db"),  '-e'
 -> $source, $target, $file {
     diag "Testing profile from $source";
 
     my $profile := MoarVM::Profile.new($target);
     isa-ok $profile, MoarVM::Profile;
     isa-ok $profile.gist, Str;
+    is-deeply $profile.target, $target, 'is the target correct?';
 
     my $overviews := $profile.overviews;
     isa-ok $overviews, List;
@@ -53,17 +57,33 @@ for
     is-deeply ([lt] $file-names.map(*.fc)), True,
       'filenames in ascending order';
 
-    my $routine-names := $profile.names;
-    isa-ok $routine-names, List;
-    ok +$routine-names, 'quite a few files overall';
-    is-deeply ([lt] $routine-names.map(*.fc)), True,
-      'routine names in ascending order';
-
     my $user-files := $profile.user-files;
     isa-ok $user-files, List;
     ok $user-files == 1,        'only one user file';
     is $user-files.head, $file, 'the place with the code';
     is-deeply ([lt] $user-files), True, 'user filenames in ascending order';
+
+#- ios -------------------------------------------------------------------------
+    my $ios := $profile.ios;
+    isa-ok $ios, List;
+    ok $ios == $file-names, 'same number of entries as "files"';
+
+    my $user-ios := $profile.user-ios;
+    isa-ok $user-ios, List;
+    ok $user-ios == 1,           'only one user io';
+    if $file eq '-e' {
+        isa-ok $user-ios.head, Failure, "no path to -e";
+    }
+    else {
+        is $user-ios.head, $file.IO, 'the IO with the code';
+    }
+
+#- names -----------------------------------------------------------------------
+    my $routine-names := $profile.names;
+    isa-ok $routine-names, List;
+    ok +$routine-names, 'quite a few files overall';
+    is-deeply ([lt] $routine-names.map(*.fc)), True,
+      'routine names in ascending order';
 
     my $user-names := $profile.user-names;
     isa-ok $user-names, List;
@@ -101,9 +121,24 @@ for
     my $routine := $routines.head;
     test-object-sanity $routine, MoarVM::Profile::Routine;
 
-    is-deeply $routine.name, 'foo', 'sub name is ok';
-    is-deeply $routine.file, $file, 'file name is ok';
-    is-deeply $routine.line, 1,     'line number is ok';
+    is-deeply $routine.name, 'foo',    'sub name is ok';
+    is-deeply $routine.file, $file,    'file name is ok';
+    if $file eq '-e' {
+        isa-ok $routine.io, Failure;
+    }
+    else {
+        is-deeply $routine.io, $file.IO, 'IO is ok';
+
+    }
+    if $target.ends-with(".sql" | ".db") {
+        is-deeply $routine.source, Nil,       'no source with .sql or .db';
+        is-deeply $routine.lines-around, Nil, 'and no lines around either';
+    }
+    else {
+        is $routine.source,       $code,   'did we get the right source';
+        is $routine.lines-around, $around, 'did we get the right around';
+    }
+    is-deeply $routine.line, 1,        'line number is ok';
 
     is-deeply $routine.is-block, False, 'it is not a block';
     is-deeply $routine.is-core,  False, 'it is not from Rakudo core';
@@ -263,5 +298,11 @@ for
     isa-ok $routines, List;
     ok +$routines, "$_.gist() produced $routines.elems() entries";
 }
+
+isa-ok file2io("SETTING::src/core.c/Int.rakumod"), IO::Path;
+isa-ok file2io("-e"), Failure;
+isa-ok file2io("not-existing-path"), Failure;
+ok file2io("src/main.nqp").ends-with("src/main.nqp"),
+  "other system paths also handled ok";
 
 # vim: expandtab shiftwidth=4
