@@ -499,7 +499,7 @@ Total execution time for the program that created this profile.
 
 The C<MoarVM::Routine> object encapsulates the information about a block
 that has been executed at least once.  A such, the name "Routine" is a bit
-of a misnomer, "Callable" would have been better probably.  But the naming
+of a misnomer, "Block" would have been better probably.  But the naming
 of these modules is following the names of the SQL tables provided, so
 "Routine" it is.
 
@@ -511,38 +511,67 @@ and as such not documented.
 =head3 calls
 
 Returns a C<List> of C<MoarVM::Profile::Call> objects for each call from
-a different location made to this C<Callable>.
+a different location made to this C<Block>.
+
+=head3 deopt-all
+
+The number of times this C<Block> has seen a global de-optimization.
+
+=head3 deopt-one
+
+The number of times this C<Block> has seen a local de-optimization.
+
+=head3 entries
+
+The total number of times this C<Block> was being called.
+
+=head3 exclusive-time
+
+The time spent in execution of this C<Block> alone.
+
+=head3 file
+
+The file in which the C<Block> has been defined.  Note this can have
+special path indicators such as "SETTING::" and "NQP::", so there's no
+direct path to an actual file.
 
 =head3 id
 
-The numerical ID of the C<Callable> in this profile.
+The numerical ID of the C<Block> in this profile.
+
+=head3 inclusive-time
+
+The time spent in execution of this C<Block>, including time spent
+in any calls that were made in this C<Block>.
+
+=head3 inlined-entries
+
+The number of calls that were made with this C<Block> inlined.
 
 =head3 io
 
-The normalized C<IO::Path> of the file in which this C<Callable> was
+The normalized C<IO::Path> of the file in which this C<Block> was
 defined.
 
 =head3 is-block
 
-Returns C<True> if the C<Callable> is not a C<Routine>.
+Returns C<True> if the C<Block> is not a C<Routine>.
 
 =head3 is-core
 
-Returns C<True> if the C<Callable> is part of the Rakudo core.
+Returns C<True> if the C<Block> is part of the Rakudo core.
 
 =head3 is-user
 
-Returns C<True> if the C<Callable> is user-supplied code.
+Returns C<True> if the C<Block> is user-supplied code.
 
-=head3 file
+=head3 jit-entries
 
-The file in which the C<Callable> has been defined.  Note this can have
-special path indicators such as "SETTING::" and "NQP::", so there's no
-direct path to an actual file.
+The number of calls that were made with this C<Block> JITted.
 
 =head3 line
 
-The line number in which the C<Callable> has been defined (if available).
+The line number in which the C<Block> has been defined (if available).
 B<-1> if no line number could be obtained (which is typical of some low
 level code blocks).
 
@@ -555,81 +584,33 @@ say $routine.lines-around(10);  # 10 lines before / after
 
 If there is C<.source> available, then this will by default return
 the source code B<3> lines before and after the line in which the
-C<Callable> begins to be defined.  Another number of lines can be
+C<Block> begins to be defined.  Another number of lines can be
 specified with the positional argument.
 
 If there is no C<.source> available, C<Nil> will be returned.
 
 =head3 name
 
-The name of the C<Callable>, "(block)" if there is no name, implying this
-is some type of non-C<Routine> C<Callable>.
+The name of the C<Block>, "(block)" if there is no name, implying this
+is some type of non-C<Routine> C<Block>.
 
-=head3 overview
+=head3 osr
 
-Returns the C<MoarVM:Profile::RoutineOverview> object associated with
-this C<Callable>.
-
-=head3 source
-
-Returns the complete source of the file of this C<Callable> if available.
-If the profile was created with just code, then that will returned.  Else
-C<Nil> will be returned.
-
-=head1 MoarVM::Profile::RoutineOverview
-
-An object containing some summary information about a
-C<MoarVM::Profile::Routine> object.
-
-=head2 Methods
-
-=item deopt-all
-=item deopt-one
-=item inlined-entries
-=item jit-entries
-=item osr
-=item spesh-entries
-
-=head3 entries
-
-The total number of times this C<Callable> was being called.
+Returns B<1> if this C<Block> had an Online Stack Replacement.
 
 =head3 site-count
 
-The number of places from which this C<Callable> was being called.
+The number of places from which this C<Block> was being called.
 
-=head3 exclusive-time
+=head3 source
 
-The time spent in execution of this C<Callable> alone.
+Returns the complete source of the file of this C<Block> if available.
+If the profile was created with just code, then that will returned.  Else
+C<Nil> will be returned.
 
-=head3 id
+=head3 spesh-entries
 
-The ID of the associated C<MoarVM::Profile::Routine> object.
-
-=head3 inclusive-time
-
-The time spent in execution of this C<Callable>, including time spent
-in any calls that were made in this C<Callable>.
-
-=head1 MoarVM::Profile::SpeshOverview
-
-An object containing some spesh related information about a
-C<MoarVM::Profile::Routine> object.
-
-=head2 Methods
-
-=item deopt-all
-=item deopt-one
-=item entries
-=item inlined-entries
-=item jit-entries
-=item osr
-=item sites
-=item spesh-entries
-
-=head3 id
-
-The ID of the associated C<MoarVM::Profile::Routine> object.
+The number of calls that were made with this C<Block> speshed.
 
 =head1 MoarVM::Profile::Type
 
@@ -668,7 +649,7 @@ say file2io("SETTING::src/core.c/Int.rakumod");
 =end code
 
 Looks at the C<file> value (as returned by C<MoarVM::Profile::Routine.file>
-method or the C<MoarVM::Profile.files> method) and attempt to convert this
+method or the C<MoarVM::Profile.files> method) and attempts to convert this
 to an C<IO::Path> of an existing path, taking into account path indicators
 such as "SETTING::" and "NQP::".
 

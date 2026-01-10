@@ -495,7 +495,7 @@ Total execution time for the program that created this profile.
 MoarVM::Profile::Routine
 ========================
 
-The `MoarVM::Routine` object encapsulates the information about a block that has been executed at least once. A such, the name "Routine" is a bit of a misnomer, "Callable" would have been better probably. But the naming of these modules is following the names of the SQL tables provided, so "Routine" it is.
+The `MoarVM::Routine` object encapsulates the information about a block that has been executed at least once. A such, the name "Routine" is a bit of a misnomer, "Block" would have been better probably. But the naming of these modules is following the names of the SQL tables provided, so "Routine" it is.
 
 How the `MoarVM::Routine` object is created, is an implementation detail and as such not documented.
 
@@ -504,35 +504,35 @@ Methods
 
 ### calls
 
-Returns a `List` of `MoarVM::Profile::Call` objects for each call from a different location made to this `Callable`.
+Returns a `List` of `MoarVM::Profile::Call` objects for each call from a different location made to this `Block`.
 
 ### id
 
-The numerical ID of the `Callable` in this profile.
+The numerical ID of the `Block` in this profile.
 
 ### io
 
-The normalized `IO::Path` of the file in which this `Callable` was defined.
+The normalized `IO::Path` of the file in which this `Block` was defined.
 
 ### is-block
 
-Returns `True` if the `Callable` is not a `Routine`.
+Returns `True` if the `Block` is not a `Routine`.
 
 ### is-core
 
-Returns `True` if the `Callable` is part of the Rakudo core.
+Returns `True` if the `Block` is part of the Rakudo core.
 
 ### is-user
 
-Returns `True` if the `Callable` is user-supplied code.
+Returns `True` if the `Block` is user-supplied code.
 
 ### file
 
-The file in which the `Callable` has been defined. Note this can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file.
+The file in which the `Block` has been defined. Note this can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file.
 
 ### line
 
-The line number in which the `Callable` has been defined (if available). **-1** if no line number could be obtained (which is typical of some low level code blocks).
+The line number in which the `Block` has been defined (if available). **-1** if no line number could be obtained (which is typical of some low level code blocks).
 
 ### lines-around
 
@@ -541,21 +541,21 @@ say $routine.lines-around;      # 3 lines before / after
 say $routine.lines-around(10);  # 10 lines before / after
 ```
 
-If there is `.source` available, then this will by default return the source code **3** lines before and after the line in which the `Callable` begins to be defined. Another number of lines can be specified with the positional argument.
+If there is `.source` available, then this will by default return the source code **3** lines before and after the line in which the `Block` begins to be defined. Another number of lines can be specified with the positional argument.
 
 If there is no `.source` available, `Nil` will be returned.
 
 ### name
 
-The name of the `Callable`, "(block)" if there is no name, implying this is some type of non-`Routine` `Callable`.
+The name of the `Block`, "(block)" if there is no name, implying this is some type of non-`Routine` `Block`.
 
 ### overview
 
-Returns the `MoarVM:Profile::RoutineOverview` object associated with this `Callable`.
+Returns the `MoarVM:Profile::RoutineOverview` object associated with this `Block`.
 
 ### source
 
-Returns the complete source of the file of this `Callable` if available. If the profile was created with just code, then that will returned. Else `Nil` will be returned.
+Returns the complete source of the file of this `Block` if available. If the profile was created with just code, then that will returned. Else `Nil` will be returned.
 
 MoarVM::Profile::RoutineOverview
 ================================
@@ -579,15 +579,15 @@ Methods
 
 ### entries
 
-The total number of times this `Callable` was being called.
+The total number of times this `Block` was being called.
 
 ### site-count
 
-The number of places from which this `Callable` was being called.
+The number of places from which this `Block` was being called.
 
 ### exclusive-time
 
-The time spent in execution of this `Callable` alone.
+The time spent in execution of this `Block` alone.
 
 ### id
 
@@ -595,35 +595,7 @@ The ID of the associated `MoarVM::Profile::Routine` object.
 
 ### inclusive-time
 
-The time spent in execution of this `Callable`, including time spent in any calls that were made in this `Callable`.
-
-MoarVM::Profile::SpeshOverview
-==============================
-
-An object containing some spesh related information about a `MoarVM::Profile::Routine` object.
-
-Methods
--------
-
-  * deopt-all
-
-  * deopt-one
-
-  * entries
-
-  * inlined-entries
-
-  * jit-entries
-
-  * osr
-
-  * sites
-
-  * spesh-entries
-
-### id
-
-The ID of the associated `MoarVM::Profile::Routine` object.
+The time spent in execution of this `Block`, including time spent in any calls that were made in this `Block`.
 
 MoarVM::Profile::Type
 =====================
@@ -663,7 +635,7 @@ file2io
 say file2io("SETTING::src/core.c/Int.rakumod");
 ```
 
-Looks at the `file` value (as returned by `MoarVM::Profile::Routine.file` method or the `MoarVM::Profile.files` method) and attempt to convert this to an `IO::Path` of an existing path, taking into account path indicators such as "SETTING::" and "NQP::".
+Looks at the `file` value (as returned by `MoarVM::Profile::Routine.file` method or the `MoarVM::Profile.files` method) and attempts to convert this to an `IO::Path` of an existing path, taking into account path indicators such as "SETTING::" and "NQP::".
 
 If no valid path is found (like for "-e"), a `Failure` is returned.
 

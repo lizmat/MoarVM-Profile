@@ -1,6 +1,14 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+    - Renamed "Callable" to "Block" in documentation, as that
+      is closer to what a ::Routine object refers to
+    - Removed ::SpeshOverview and Profile.spesh-overviews: the
+      information was a subset of what ::RoutineOverview
+      provides
+    - Removed ::Routine.overview, added all accessors of the
+      ::RoutineOverview class to ::Routine, making the
+      ::RoutineOverview class an implementation detail
 
 0.0.4  2026-01-08T22:51:25+01:00
     - Add exported "file2io" subroutine

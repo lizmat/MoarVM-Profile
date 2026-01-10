@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 120 + 16;
+plan 5 * 121 + 16;
 
 my constant $times = 1000000;
 
@@ -144,15 +144,17 @@ for
     is-deeply $routine.is-core,  False, 'it is not from Rakudo core';
     is-deeply $routine.is-user,  True,  'it is a user supplied routine';
 
-    $overview := $routine.overview;
-    test-object-sanity $overview, MoarVM::Profile::RoutineOverview;
+    my $entries         := $routine.entries;
+    my $inclusive-time  := $routine.inclusive-time;
+    my $exclusive-time  := $routine.exclusive-time;
+    my $spesh-entries   := $routine.spesh-entries;
+    my $inlined-entries := $routine.inlined-entries;
+    my $site-count      := $routine.site-count;
 
-    my $entries         := $overview.entries;
-    my $inclusive-time  := $overview.inclusive-time;
-    my $exclusive-time  := $overview.exclusive-time;
-    my $spesh-entries   := $overview.spesh-entries;
-    my $inlined-entries := $overview.inlined-entries;
-    my $site-count      := $overview.site-count;
+    ok $routine.jit-entries >= 0, 'may or may not have JITted entries';
+    ok $routine.osr         == 0, 'no OSR on this routine';
+    ok $routine.deopt-one   == 0, 'no local deopts';
+    ok $routine.deopt-all   == 0, 'no global deopts';
 
     ok $entries        == $times,          'seen all calls made';
     ok $spesh-entries   < $entries,        'fewer spesh entries';
@@ -271,15 +273,6 @@ for
     ok $allocation.type-id == $type.id, 'with the correct type ID';
     ok $allocation.spesh < $times, 'with an expected number of spesh count';
     ok $allocation.count < $times, 'with an expected count';
-
-#- spesh-overview --------------------------------------------------------------
-    my $spesh-overviews := $profile.spesh-overviews;
-    isa-ok $spesh-overviews, List;
-
-    my $sp-overview := $spesh-overviews.head;
-    test-object-sanity $sp-overview, MoarVM::Profile::SpeshOverview;
-
-    # not sure what to reliably test here
 }
 
 my $profile := MoarVM::Profile.new($*PROGRAM.sibling("foo.db"));

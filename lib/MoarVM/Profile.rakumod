@@ -128,7 +128,7 @@ SELECT
   total(jit),
   total(count + spesh + jit),
   total(replaced)
-  FROM allocations
+FROM allocations
 SQL
 }
 
@@ -374,9 +374,11 @@ SQL
 }
 
 #- RoutineOverview -------------------------------------------------------------
-class MoarVM::Profile::RoutineOverview does DefaultParts {
-    method table(--> 'calls') { }
-    method method-names() is implementation-detail {
+my class MoarVM::Profile::RoutineOverview
+  does DefaultParts is implementation-detail
+{
+    method table(--> 'calls') { }  # UNCOVERABLE
+    method method-names() is implementation-detail {  # UNCOVERABLE
         BEGIN <
           id entries inclusive-time exclusive-time spesh-entries jit-entries
           inlined-entries osr deopt-one deopt-all site-count
@@ -400,32 +402,6 @@ GROUP BY c.routine_id
 SQL
 }
 
-#- SpeshOverview ---------------------------------------------------------------
-class MoarVM::Profile::SpeshOverview does DefaultParts {
-    method table(--> 'calls') { }
-    method method-names() is implementation-detail {
-        BEGIN <
-          id deopt-one deopt-all osr entries inlined-entries spesh-entries
-          jit-entries sites
-        >
-    }
-    method select(--> Str:D) { q:to/SQL/ }
-SELECT
-  c.routine_id,
-  TOTAL(c.deopt_one),
-  TOTAL(c.deopt_all),
-  TOTAL(c.osr),
-  TOTAL(c.entries),
-  TOTAL(c.inlined_entries),
-  TOTAL(c.spesh_entries),
-  TOTAL(c.jit_entries),
-  COUNT(c.id)
-FROM calls c
-WHERE c.deopt_one > 0 OR c.deopt_all > 0 OR c.osr > 0
-GROUP BY c.routine_id
-SQL
-}
-
 #- Routine ---------------------------------------------------------------------
 # CREATE TABLE routines(
 #  id INTEGER PRIMARY KEY ASC,
@@ -437,6 +413,7 @@ SQL
 class MoarVM::Profile::Routine {
     has int @!parts is built(:bind);
     has     $.profile;
+    has     $!overview;
     has     $!calls;
 
     multi method new(MoarVM::Profile::Routine: $profile, @a) {
@@ -488,8 +465,39 @@ class MoarVM::Profile::Routine {
         "$.id: $.name ($.file:$.line)"
     }
 
-    method overview(MoarVM::Profile::Routine:D: --> MoarVM::Profile::RoutineOverview:D) {
-        $!profile.routine-overviews[$.id] // Nil
+    method !overview() {
+        $!overview // ($!overview := $!profile.routine-overviews[$.id])
+    }
+
+    method entries(MoarVM::Profile::Routine:D:) {
+        self!overview.entries
+    }
+    method inclusive-time(MoarVM::Profile::Routine:D:) {
+        self!overview.inclusive-time
+    }
+    method exclusive-time(MoarVM::Profile::Routine:D:) {
+        self!overview.exclusive-time
+    }
+    method spesh-entries(MoarVM::Profile::Routine:D:) {
+        self!overview.spesh-entries
+    }
+    method jit-entries(MoarVM::Profile::Routine:D:) {
+        self!overview.jit-entries
+    }
+    method inlined-entries(MoarVM::Profile::Routine:D:) {
+        self!overview.inlined-entries
+    }
+    method osr(MoarVM::Profile::Routine:D:) {
+        self!overview.osr
+    }
+    method deopt-one(MoarVM::Profile::Routine:D:) {
+        self!overview.deopt-one
+    }
+    method deopt-all(MoarVM::Profile::Routine:D:) {
+        self!overview.deopt-all
+    }
+    method site-count(MoarVM::Profile::Routine:D:) {
+        self!overview.site-count
     }
 
     method calls(MoarVM::Profile::Routine:D: --> List:D) {
@@ -859,13 +867,6 @@ class MoarVM::Profile:ver<0.0.4>:auth<zef:lizmat> {
             }
             $!routine-overviews := @overviews.List
         }
-    }
-
-    method spesh-overviews(MoarVM::Profile:D:) is implementation-detail {
-        $!spesh-overviews // ($!spesh-overviews :=
-          self.query(MoarVM::Profile::SpeshOverview.select).arrays.map({
-              MoarVM::Profile::SpeshOverview.new($_);
-          }).eager)
     }
 
     method types(MoarVM::Profile:D: --> List:D) {
