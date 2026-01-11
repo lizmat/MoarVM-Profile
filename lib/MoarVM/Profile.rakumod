@@ -47,6 +47,36 @@ my sub run-code($file, *@args) {
     $proc
 }
 
+my constant $BON  = "\e[1m";
+my constant $BOFF = "\e[22m";
+
+# Bold some texts
+my sub bold(Str() $text) { $BON ~ $text ~ $BOFF }  # UNCOVERABLE
+
+# Convert nano-seconds to milliseconds
+my sub milli(int $nano, $width? is copy) {
+    --$width if $width;
+    my $milli := $nano < 5
+      ?? $width
+        ?? (" " x --$width) ~ "0ms"
+        !! "0ms"
+      !! sprintf(($width ?? "%$width.2fms" !! "%.2fms"), $nano / 1000);
+    $*BOLD ?? bold($milli) !! $milli
+}
+
+# Convert to Rat to percentage
+my sub percent(Rat:D $rat, $width = "") {
+    my $percent := $rat
+      ?? sprintf("%$width.2f%%", 100 * $rat)
+      !! sprintf("%{$width + 1}s", "0%");
+    $*BOLD ?? bold($percent) !! $percent
+}
+
+# Convert an Instant to a readable DateTime
+my sub datetime(Instant:D $then) {
+    $then.DateTime.Str.subst(/ \.\d+ /)
+}
+
 #- exported subroutines --------------------------------------------------------
 my $SETTING-root = $*EXECUTABLE.parent(3);
 my sub file2io(str $target) is export {
@@ -451,8 +481,34 @@ class MoarVM::Profile::Routine {
         !self.is-core
     }
 
-    multi method gist(MoarVM::Profile::Routine:D: --> Str:D) {
-        "$.id: $.name ($.file:$.line)"
+    method execution-type(MoarVM::Profile::Routine:D: --> Str:D) {
+        self.jit-entries
+          ?? 'JIT'
+          !! self.spesh-entries
+            ?? 'spesh'
+            !! 'interp'
+    }
+
+    multi method gist(MoarVM::Profile::Routine:D: :$bold, :$header --> Str:D) {
+        my $*BOLD;  # don't want auto-bolding here
+        my int $total-time = $!profile.overviews.head.total-time;
+
+        my $line1 := sprintf "%s %s  %s  %s  %s",
+          self.entries.fmt('%9d'),
+          percent(self.inclusive-time / $total-time, 10),
+          percent(self.exclusive-time / $total-time, 10),
+          self.execution-type.fmt("%6s"),
+          self.name;
+        my $line2 := sprintf "           %s  %s %s  %s",
+          milli(self.inclusive-time, 10),
+          milli(self.exclusive-time, 10),
+          self.osr ?? '   OSR' !! '      ',
+          self.file ~ ':' ~ self.line;
+
+        $line1 := bold($line1) if $bold;
+        $header
+          ?? "  Entries    Inclusive    Exclusive   Exec  Name\n$line1\n$line2"
+          !! "$line1\n$line2"
     }
 
     method calls(MoarVM::Profile::Routine:D: --> List:D) {
@@ -523,8 +579,6 @@ class MoarVM::Profile:ver<0.0.4>:auth<zef:lizmat> {
     has $!gcs;
     has $!gc-overview;
     has $!routines;
-    has $!routine-overviews;
-    has $!spesh-overviews;
     has $!types;
     has $!files;
     has $!ios;
@@ -622,29 +676,8 @@ class MoarVM::Profile:ver<0.0.4>:auth<zef:lizmat> {
         ))
     }
 
-    multi method gist(MoarVM::Profile:D: :$bold --> Str:D) {
-        my str $BON  = $bold ?? "\e[1m"  !! "";
-        my str $BOFF = $bold ?? "\e[22m" !! "";
-
-        # Bold some texts if so indicated
-        my sub bold(Str() $text) { $BON ~ $text ~ $BOFF }
-
-        # Convert nano-seconds to milliseconds
-        my sub milli(Str() $nano) {
-            "$BON$nano.substr(0,*-3)\.$nano.substr(*-3,2)ms$BOFF"
-        }
-
-        # Convert to Rat to percentage
-        my sub percent(Rat:D $rat) {
-            $rat
-              ?? sprintf("$BON%.2f%%$BOFF", 100 * $rat)
-              !! $BON ~ "0%" ~ $BOFF
-        }
-
-        # Convert an Instant to a readable DateTime
-        my sub datetime(Instant:D $then) {
-            $then.DateTime.Str.subst(/ \.\d+ /)
-        }
+    multi method gist(MoarVM::Profile:D: :bold($*BOLD) --> Str:D) {
+        my &bold = $*BOLD ?? &UNIT::bold !! -> $_ { $_ }
 
         my $overview   := self.overviews(1);
         my $total-time := $overview.total-time;
@@ -718,6 +751,16 @@ class MoarVM::Profile:ver<0.0.4>:auth<zef:lizmat> {
           !! "There were &bold("$osr-total On Stack Replacements") performed.";
 
         add "";
+
+        add "Routines";
+        add "========";
+        @parts.append: self.routines
+          .grep({ $_ &&  (.spesh-entries || .jit-entries || .entries > 1) })
+          .sort(-*.inclusive-time)
+          .head(10)
+          .map(*.gist(:bold($*BOLD), :header(!$++)));
+        add "";
+
         @parts.join("\n")
     }
 

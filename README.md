@@ -21,28 +21,52 @@ say $profile;
 #
 # Time Spent
 # ==========
-# The profiled code ran for 153.19ms.
-# Of this, 25.44ms were spent in garbage collection (that's 16.61%).
-# The dynamic optimizer was active for 0.45% of the program's run time.
+# The profiled code ran for 126.78ms.
+# Of this, 25.35ms were spent in garbage collection (that's 20.00%).
+# The dynamic optimizer was active for 0.54% of the program's run time.
 #
 # Call Frames
 # ===========
-# In total, 5619 call frames were entered and exited by the profiled code.
-# Inlining eliminated the need to create 2997075 call frames (that's 99.81%).
-# 5240 call frames were interpreted, 2997454 were specialized (99.83%).
+# In total, 5661 call frames were entered and exited by the profiled code.
+# Inlining eliminated the need to create 2997033 call frames (that's 99.81%).
+# 5237 call frames were interpreted, 2997457 were specialized (99.83%).
 #
 # Garbage Collection
 # ==================
 # The profiled code did 19 garbage collections.
 # There were 0 full collections involving the entire heap.
 # The average nursery collection time was 1.33ms.
-# Scalar replacement eliminated 999154 allocations (that's 33.28%).
+# Scalar replacement eliminated 999155 allocations (that's 33.28%).
 #
 # Dynamic Optimization
 # ====================
-# Of 2997454 optimized frames, there were 0 deoptimizations (that's 0%).
+# Of 2997457 optimized frames, there were 0 deoptimizations (that's 0%).
 # There was no global deoptimization triggered.
 # There was one On Stack Replacement performed.
+#
+# Routines
+# ========
+#   Entries    Inclusive    Exclusive   Exec  Name
+#         1      78.45%       25.54%   spesh  <unit>
+#                99.46ms      32.38ms    OSR  -e:1
+#   1000000      67.09%       16.47%   spesh  (block)
+#                85.05ms      20.88ms         -e:1
+#   1000000      50.59%       17.34%   spesh  foo
+#                64.14ms      21.99ms         -e:1
+#   1000000      33.16%       18.95%   spesh  infix:<*>
+#                42.04ms      24.03ms         SETTING::src/core.c/Int.rakumod:348
+#         2       0.47%        0.01%  interp  (block)
+#                 0.60ms       0.01ms         SETTING::src/core.c/Rakudo/Internals.rakumod:1793
+#         2       0.45%        0.01%  interp  (block)
+#                 0.57ms       0.01ms         SETTING::src/core.c/Rakudo/Internals.rakumod:1794
+#        11       0.32%        0.02%  interp  (block)
+#                 0.40ms       0.02ms         src/vm/moar/dispatchers.nqp:1873
+#        11       0.30%        0.05%  interp  (block)
+#                 0.38ms       0.07ms         src/vm/moar/dispatchers.nqp:2901
+#       166       0.29%        0.13%  interp  find_method
+#                 0.37ms       0.16ms         src/Perl6/Metamodel/MROBasedMethodDispatch.nqp:13
+#        57       0.27%        0.14%  interp  (block)
+#                 0.35ms       0.18ms         src/vm/moar/dispatchers.nqp:1125
 ```
 
 or use the installed script **mvm-profile**:
@@ -506,9 +530,45 @@ Methods
 
 Returns a `List` of `MoarVM::Profile::Call` objects for each call from a different location made to this `Block`.
 
+### deopt-all
+
+The number of times this `Block` has seen a global de-optimization.
+
+### deopt-one
+
+The number of times this `Block` has seen a local de-optimization.
+
+### entries
+
+The total number of times this `Block` was being called.
+
+### exclusive-time
+
+The time spent in execution of this `Block` alone.
+
+### file
+
+The file in which the `Block` has been defined. Note this can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file.
+
+### gist
+
+Apart from a normal gist, the following named arguments can be specified:
+
+  * bold - bolden the first line of each gist (default: not)
+
+  * header - show a header (default: not)
+
 ### id
 
 The numerical ID of the `Block` in this profile.
+
+### inclusive-time
+
+The time spent in execution of this `Block`, including time spent in any calls that were made in this `Block`.
+
+### inlined-entries
+
+The number of calls that were made with this `Block` inlined.
 
 ### io
 
@@ -526,9 +586,9 @@ Returns `True` if the `Block` is part of the Rakudo core.
 
 Returns `True` if the `Block` is user-supplied code.
 
-### file
+### jit-entries
 
-The file in which the `Block` has been defined. Note this can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file.
+The number of calls that were made with this `Block` JITted.
 
 ### line
 
@@ -549,53 +609,21 @@ If there is no `.source` available, `Nil` will be returned.
 
 The name of the `Block`, "(block)" if there is no name, implying this is some type of non-`Routine` `Block`.
 
-### overview
+### osr
 
-Returns the `MoarVM:Profile::RoutineOverview` object associated with this `Block`.
-
-### source
-
-Returns the complete source of the file of this `Block` if available. If the profile was created with just code, then that will returned. Else `Nil` will be returned.
-
-MoarVM::Profile::RoutineOverview
-================================
-
-An object containing some summary information about a `MoarVM::Profile::Routine` object.
-
-Methods
--------
-
-  * deopt-all
-
-  * deopt-one
-
-  * inlined-entries
-
-  * jit-entries
-
-  * osr
-
-  * spesh-entries
-
-### entries
-
-The total number of times this `Block` was being called.
+Returns **1** if this `Block` had an Online Stack Replacement.
 
 ### site-count
 
 The number of places from which this `Block` was being called.
 
-### exclusive-time
+### source
 
-The time spent in execution of this `Block` alone.
+Returns the complete source of the file of this `Block` if available. If the profile was created with just code, then that will returned. Else `Nil` will be returned.
 
-### id
+### spesh-entries
 
-The ID of the associated `MoarVM::Profile::Routine` object.
-
-### inclusive-time
-
-The time spent in execution of this `Block`, including time spent in any calls that were made in this `Block`.
+The number of calls that were made with this `Block` speshed.
 
 MoarVM::Profile::Type
 =====================
