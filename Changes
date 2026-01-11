@@ -1,6 +1,8 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+
+0.0.5  2026-01-11T21:24:52+01:00
     - Rename "Callable" to "Block" in documentation, as that
       is closer to what a ::Routine object refers to
     - Remove ::SpeshOverview and Profile.spesh-overviews: the
