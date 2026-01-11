@@ -161,8 +161,8 @@ class MoarVM::Profile::Overview does DefaultParts {
 #  type_links JSON
 # );
 class MoarVM::Profile::Type {
-    has $.profile;
-    has @.parts is built(:bind);
+    has @!parts   is built(:bind);
+    has $!profile is built;
     has $!allocations;
 
     multi method new(MoarVM::Profile::Type: $profile, @a) {
@@ -234,7 +234,7 @@ class MoarVM::Profile::Type {
 # );
 
 class MoarVM::Profile::Call does DefaultParts {
-    has $.profile;
+    has $!profile is built;
     has $!allocations;
     has $!ancestry;
 
@@ -373,35 +373,6 @@ SQL
     }
 }
 
-#- RoutineOverview -------------------------------------------------------------
-my class MoarVM::Profile::RoutineOverview
-  does DefaultParts is implementation-detail
-{
-    method table(--> 'calls') { }  # UNCOVERABLE
-    method method-names() is implementation-detail {  # UNCOVERABLE
-        BEGIN <
-          id entries inclusive-time exclusive-time spesh-entries jit-entries
-          inlined-entries osr deopt-one deopt-all site-count
-        >
-    }
-    method select(--> Str:D) { q:to/SQL/ }
-SELECT
-  c.routine_id,
-  TOTAL(entries),
-  TOTAL(case WHEN rec_depth = 0 THEN inclusive_time ELSE 0 END),
-  TOTAL(exclusive_time),
-  TOTAL(spesh_entries),
-  TOTAL(jit_entries),
-  TOTAL(inlined_entries),
-  TOTAL(osr),
-  TOTAL(deopt_one),
-  TOTAL(deopt_all),
-  COUNT(c.id)
-FROM calls c
-GROUP BY c.routine_id
-SQL
-}
-
 #- Routine ---------------------------------------------------------------------
 # CREATE TABLE routines(
 #  id INTEGER PRIMARY KEY ASC,
@@ -411,9 +382,8 @@ SQL
 # );
 
 class MoarVM::Profile::Routine {
-    has int @!parts is built(:bind);
-    has     $.profile;
-    has     $!overview;
+    has int @!parts   is built(:bind);
+    has     $!profile is built;
     has     $!calls;
 
     multi method new(MoarVM::Profile::Routine: $profile, @a) {
@@ -434,10 +404,30 @@ class MoarVM::Profile::Routine {
         BEGIN "SELECT " ~ $?CLASS.columns ~ " FROM " ~ $?CLASS.table
     }
 
+    # This adds the overview information from the calls table to the
+    # object, so that they can be accessed quickly in selecting and
+    # sorting operations
+    method add-overview(MoarVM::Profile::Routine:D: @values
+    --> Nil) is implementation-detail {
+        @!parts.append(@values.map(*.Int))
+    }
+
     method id(        MoarVM::Profile::Routine:D: --> int) { @!parts[0] }
     method name-index(MoarVM::Profile::Routine:D: --> int) { @!parts[1] }
     method line(      MoarVM::Profile::Routine:D: --> int) { @!parts[2] }
     method file-index(MoarVM::Profile::Routine:D: --> int) { @!parts[3] }
+
+    # From .add-overview
+    method entries(        MoarVM::Profile::Routine:D: --> int) { @!parts[ 4] }
+    method inclusive-time( MoarVM::Profile::Routine:D: --> int) { @!parts[ 5] }
+    method exclusive-time( MoarVM::Profile::Routine:D: --> int) { @!parts[ 6] }
+    method spesh-entries(  MoarVM::Profile::Routine:D: --> int) { @!parts[ 7] }
+    method jit-entries(    MoarVM::Profile::Routine:D: --> int) { @!parts[ 8] }
+    method inlined-entries(MoarVM::Profile::Routine:D: --> int) { @!parts[ 9] }
+    method osr(            MoarVM::Profile::Routine:D: --> int) { @!parts[10] }
+    method deopt-one(      MoarVM::Profile::Routine:D: --> int) { @!parts[11] }
+    method deopt-all(      MoarVM::Profile::Routine:D: --> int) { @!parts[12] }
+    method site-count(     MoarVM::Profile::Routine:D: --> int) { @!parts[13] }
 
     method name(MoarVM::Profile::Routine:D: --> str) {
         if @!parts[1] -> $index {
@@ -463,41 +453,6 @@ class MoarVM::Profile::Routine {
 
     multi method gist(MoarVM::Profile::Routine:D: --> Str:D) {
         "$.id: $.name ($.file:$.line)"
-    }
-
-    method !overview() {
-        $!overview // ($!overview := $!profile.routine-overviews[$.id])
-    }
-
-    method entries(MoarVM::Profile::Routine:D:) {
-        self!overview.entries
-    }
-    method inclusive-time(MoarVM::Profile::Routine:D:) {
-        self!overview.inclusive-time
-    }
-    method exclusive-time(MoarVM::Profile::Routine:D:) {
-        self!overview.exclusive-time
-    }
-    method spesh-entries(MoarVM::Profile::Routine:D:) {
-        self!overview.spesh-entries
-    }
-    method jit-entries(MoarVM::Profile::Routine:D:) {
-        self!overview.jit-entries
-    }
-    method inlined-entries(MoarVM::Profile::Routine:D:) {
-        self!overview.inlined-entries
-    }
-    method osr(MoarVM::Profile::Routine:D:) {
-        self!overview.osr
-    }
-    method deopt-one(MoarVM::Profile::Routine:D:) {
-        self!overview.deopt-one
-    }
-    method deopt-all(MoarVM::Profile::Routine:D:) {
-        self!overview.deopt-all
-    }
-    method site-count(MoarVM::Profile::Routine:D:) {
-        self!overview.site-count
     }
 
     method calls(MoarVM::Profile::Routine:D: --> List:D) {
@@ -854,18 +809,24 @@ class MoarVM::Profile:ver<0.0.4>:auth<zef:lizmat> {
                 my $routine := MoarVM::Profile::Routine.new(self, $_);
                 @routines[$routine.id] := $routine;
             }
+            @routines[.head].add-overview(.skip)
+              for self.query(q:to/SQL/).arrays;
+SELECT
+  routine_id,
+  TOTAL(entries),
+  TOTAL(CASE WHEN rec_depth = 0 THEN inclusive_time ELSE 0 END),
+  TOTAL(exclusive_time),
+  TOTAL(spesh_entries),
+  TOTAL(jit_entries),
+  TOTAL(inlined_entries),
+  TOTAL(osr),
+  TOTAL(deopt_one),
+  TOTAL(deopt_all),
+  COUNT(id)
+FROM calls
+GROUP BY routine_id
+SQL
             $!routines := @routines.List
-        }
-    }
-
-    method routine-overviews(MoarVM::Profile:D:) is implementation-detail {
-        $!routine-overviews // do {
-            my @overviews is default(Nil);
-            for self.query(MoarVM::Profile::RoutineOverview.select).arrays {
-                my $overview := MoarVM::Profile::RoutineOverview.new($_);
-                @overviews[$overview.id] := $overview;
-            }
-            $!routine-overviews := @overviews.List
         }
     }
 
