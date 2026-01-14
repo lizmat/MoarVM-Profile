@@ -1,6 +1,8 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+
+0.0.6  2026-01-14T21:55:24+01:00
     - Add ::Profile.report method, for generating
       configurable report.  Also add ::Routine.report and
       ::Type.report methods with similar functionality

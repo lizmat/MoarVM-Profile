@@ -639,7 +639,7 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 }
 
 #- Profile creation ------------------------------------------------------------
-class MoarVM::Profile:ver<0.0.5>:auth<zef:lizmat> {
+class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
     has $.target;
     has $.db;
     has $!overviews;
