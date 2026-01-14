@@ -1,7 +1,7 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 121 + 16;
+plan 5 * 127 + 16;
 
 my constant $times = 1000000;
 
@@ -35,6 +35,7 @@ for
     my $profile := MoarVM::Profile.new($target);
     isa-ok $profile, MoarVM::Profile;
     isa-ok $profile.gist, Str;
+    isa-ok $profile.report, Str;
     is-deeply $profile.target, $target, 'is the target correct?';
 
     my $overviews := $profile.overviews;
@@ -121,15 +122,20 @@ for
     my $routine := $routines.head;
     test-object-sanity $routine, MoarVM::Profile::Routine;
 
-    is-deeply $routine.name, 'foo',    'sub name is ok';
-    is-deeply $routine.file, $file,    'file name is ok';
+    is-deeply $routine.name, 'foo', 'sub name is ok';
+    is-deeply $routine.file, $file, 'file name is ok';
     if $file eq '-e' {
-        isa-ok $routine.io, Failure;
+        (my $io := $routine.io).defined;  # disarm any Failure
+        isa-ok $io, Failure;
     }
     else {
         is-deeply $routine.io, $file.IO, 'IO is ok';
 
     }
+    is-deeply $routine.line,    1,             'line number is ok';
+    is $routine.file-line,      "$file:1",     'file-line is ok';
+    is $routine.name-file-line, "foo $file:1", 'is name-file-line ok';
+
     if $target.ends-with(".sql" | ".db") {
         is-deeply $routine.source, Nil,       'no source with .sql or .db';
         is-deeply $routine.lines-around, Nil, 'and no lines around either';
@@ -138,7 +144,6 @@ for
         is $routine.source,       $code,   'did we get the right source';
         is $routine.lines-around, $around, 'did we get the right around';
     }
-    is-deeply $routine.line, 1,        'line number is ok';
 
     is-deeply $routine.is-block, False, 'it is not a block';
     is-deeply $routine.is-core,  False, 'it is not from Rakudo core';
@@ -162,6 +167,8 @@ for
     ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
     ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
 
+    isa-ok $routine.report, Str;
+
 #- calls -----------------------------------------------------------------------
     my $calls := $routine.calls;
     isa-ok $calls, List;
@@ -178,6 +185,8 @@ for
     ok $call.inlined-entries == $inlined-entries, 'inlined-entries matches';
     ok $call.inclusive-time  == $inclusive-time,  'inclusive time matches';
     ok $call.exclusive-time  == $exclusive-time,  'exclusive time matches';
+
+    is-deeply $call.routine, $routine, 'does the routine match';
 
     my $parent := $call.parent;
     ok $parent.id == $call.parent-id, 'parent ID appears correct';
@@ -262,11 +271,13 @@ for
     my $type-links := $type.type-links;
     isa-ok $type-links, Map;
 
+    isa-ok $routine.report, Str;
+
     $allocations := $type.allocations;
-    isa-ok $allocations, List;
+    isa-ok $allocations, Map;
     ok +$allocations, 'seen allocations for this type';
 
-    $allocation := $allocations.head;
+    $allocation := $allocations.head.value;
     test-object-sanity $allocation, MoarVM::Profile::Allocation;
 
     ok $allocation.call-id, 'there appears to be a call ID';

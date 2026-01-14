@@ -15,65 +15,87 @@ my $profile = MoarVM::Profile(
 );
 
 say $profile;
-# MoarVM Profiler Results
-# =======================
-# sub foo($a) { $a * $a }; foo($_) for ^1000000
-#
-# Time Spent
-# ==========
-# The profiled code ran for 126.78ms.
-# Of this, 25.35ms were spent in garbage collection (that's 20.00%).
-# The dynamic optimizer was active for 0.54% of the program's run time.
-#
-# Call Frames
-# ===========
-# In total, 5661 call frames were entered and exited by the profiled code.
-# Inlining eliminated the need to create 2997033 call frames (that's 99.81%).
-# 5237 call frames were interpreted, 2997457 were specialized (99.83%).
-#
-# Garbage Collection
-# ==================
-# The profiled code did 19 garbage collections.
-# There were 0 full collections involving the entire heap.
-# The average nursery collection time was 1.33ms.
-# Scalar replacement eliminated 999155 allocations (that's 33.28%).
-#
-# Dynamic Optimization
-# ====================
-# Of 2997457 optimized frames, there were 0 deoptimizations (that's 0%).
-# There was no global deoptimization triggered.
-# There was one On Stack Replacement performed.
-#
-# Routines
-# ========
-#   Entries    Inclusive    Exclusive   Exec  Name
-#         1      78.45%       25.54%   spesh  <unit>
-#                99.46ms      32.38ms    OSR  -e:1
-#   1000000      67.09%       16.47%   spesh  (block)
-#                85.05ms      20.88ms         -e:1
-#   1000000      50.59%       17.34%   spesh  foo
-#                64.14ms      21.99ms         -e:1
-#   1000000      33.16%       18.95%   spesh  infix:<*>
-#                42.04ms      24.03ms         SETTING::src/core.c/Int.rakumod:348
-#         2       0.47%        0.01%  interp  (block)
-#                 0.60ms       0.01ms         SETTING::src/core.c/Rakudo/Internals.rakumod:1793
-#         2       0.45%        0.01%  interp  (block)
-#                 0.57ms       0.01ms         SETTING::src/core.c/Rakudo/Internals.rakumod:1794
-#        11       0.32%        0.02%  interp  (block)
-#                 0.40ms       0.02ms         src/vm/moar/dispatchers.nqp:1873
-#        11       0.30%        0.05%  interp  (block)
-#                 0.38ms       0.07ms         src/vm/moar/dispatchers.nqp:2901
-#       166       0.29%        0.13%  interp  find_method
-#                 0.37ms       0.16ms         src/Perl6/Metamodel/MROBasedMethodDispatch.nqp:13
-#        57       0.27%        0.14%  interp  (block)
-#                 0.35ms       0.18ms         src/vm/moar/dispatchers.nqp:1125
 ```
+
+    MoarVM Profiler Results at 2026-01-14T21:09:44+01:00
+    ================================================================================
+    sub foo($a) { $a * $a }; foo($_) for ^1000000
+
+    Time Spent
+    ================================================================================
+    The profiled code ran for 127.33ms.
+    Of this, 24.79ms were spent in garbage collection (that's 19.47%).
+    The dynamic optimizer was active for 0.52% of the program's run time.
+
+    Call Frames
+    ================================================================================
+    In total, 5619 call frames were entered and exited by the profiled code.
+    Inlining eliminated the need to create 2997075 call frames (that's 99.81%).
+    5205 call frames were interpreted, 2997489 were specialized (99.83%).
+
+    Garbage Collection
+    ================================================================================
+    The profiled code did 19 garbage collections.
+    There were 0 full collections involving the entire heap.
+    The average nursery collection time was 1.30ms.
+    Scalar replacement eliminated 999167 allocations (that's 33.28%).
+
+    Dynamic Optimization
+    ================================================================================
+    Of 2997489 optimized frames, there were 0 deoptimizations (that's 0%).
+    There was no global deoptimization triggered.
+    There was one On Stack Replacement performed.
+
+    Routines
+    ================================================================================
+      Entries    Inclusive    Exclusive   Exec  Name
+            1      79.02%       25.54%   spesh  <unit>
+                  100.61ms      32.52ms    OSR  -e:1
+
+      1000000      33.12%       18.98%   spesh  infix:<*>
+                   42.18ms      24.16ms         SETTING::src/core.c/Int.rakumod:348
+
+      1000000      50.83%       17.62%   spesh  foo
+                   64.72ms      22.43ms         -e:1
+
+      1000000      67.60%       16.74%   spesh  (block)
+                   86.07ms      21.31ms         -e:1
+
+           57       0.27%        0.14%  interp  (block)
+                    0.34ms       0.18ms         src/vm/moar/dispatchers.nqp:1125
+
+    Types
+    ================================================================================
+    Allocations  Name / Routines
+        1999981  Int at 2 call sites:
+         999996  infix:<*> SETTING::src/core.c/Int.rakumod:348
+         999985  -e:1
+
+            844  Scalar at 7 call sites:
+            833  foo -e:1
+              3  POPULATE SETTING::src/core.c/Exception.rakumod:1092
+              2  backtrace SETTING::src/core.c/Exception.rakumod:10
+
+            580  BOOTCapture at 21 call sites:
+            128  NQP::src/core/dispatchers.nqp:5
+            122  src/vm/moar/dispatchers.nqp:1452
+             76  src/vm/moar/dispatchers.nqp:3431
+
+            463  BOOTTracked at 21 call sites:
+             77  src/vm/moar/dispatchers.nqp:3925
+             66  NQP::src/core/dispatchers.nqp:273
+             66  src/vm/moar/dispatchers.nqp:3431
+
+            451  BOOTHash at 24 call sites:
+            332  find_method src/Perl6/Metamodel/MROBasedMethodDispatch.nqp:13
+             24  capture SETTING::src/core.c/Parameter.rakumod:297
+             16  slurpy SETTING::src/core.c/Parameter.rakumod:288
 
 or use the installed script **mvm-profile**:
 
     $ mvm-profile 'sub foo($a) { $a * $a }; foo($_) for ^1000000'
-    MoarVM Profiler Results
-    =======================
+    MoarVM Profiler Results at 2026-01-14T21:09:44+01:00
+    ================================================================================
     sub foo($a) { $a * $a }; foo($_) for ^1000000
 
     Time Spent
@@ -185,6 +207,16 @@ say $profile.overviews[1];
 ### query
 
 Perform a SQL query on the database associated with the profile.
+
+### report
+
+Produce a report about this profile, allowing for these named arguments:
+
+  * :routines - # of routines to show (default: 5)
+
+  * :types - # of types with allocations to show (default: 5)
+
+  * :routines-per-type - # of routines per type (default: 3)
 
 ### routines
 
@@ -355,6 +387,10 @@ Returns the `MoarVM::Profile::Call` object of the parent of this call, or `Nil` 
 ### parent-id
 
 Returns the `id` of the parent of this call.
+
+### routine
+
+The `MoarVM::Profile::Routine` object that was called.
 
 ### routine-id
 
@@ -550,13 +586,9 @@ The time spent in execution of this `Block` alone.
 
 The file in which the `Block` has been defined. Note this can have special path indicators such as "SETTING::" and "NQP::", so there's no direct path to an actual file.
 
-### gist
+### file-line
 
-Apart from a normal gist, the following named arguments can be specified:
-
-  * bold - bolden the first line of each gist (default: not)
-
-  * header - show a header (default: not)
+Concatenation of the `.file` and `.line` methods with a colon inbetween. Intended to provide a consistent string representation.
 
 ### id
 
@@ -609,9 +641,21 @@ If there is no `.source` available, `Nil` will be returned.
 
 The name of the `Block`, "(block)" if there is no name, implying this is some type of non-`Routine` `Block`.
 
+### name-file-line
+
+Concatenation of the `.name` and `.fileline` methods, with a colon inbetween. Intended to provide a consistent string representation.
+
 ### osr
 
 Returns **1** if this `Block` had an Online Stack Replacement.
+
+### report
+
+Produce a report about this `Block`, accepts these named arguments:
+
+  * bold - bolden if possible (default: not)
+
+  * header - show a header (default: not)
 
 ### site-count
 
@@ -633,9 +677,21 @@ The `MoarVM::Type` object encapsulates the information about a type (class, enum
 Methods
 -------
 
+### allocated
+
+Returns the total number of allocations done for this type in this profile.
+
+### allocated-by-routine
+
+Returns a `Bag` with the number of allocations done per `MoarVM::Profile::Routine` object.
+
 ### allocations
 
-Returns a `List` with `MoarVM::Profile::Allocation` objects for this type.
+Returns a `Map` with `MoarVM::Profile::Allocation` objects for this type, keyed by their `.call-id`.
+
+### calls
+
+Returns a `List` with `MoarVM::Profile::Call` objects of the `Block`s in which allocations for this type were made.
 
 ### extra-info
 
@@ -648,6 +704,14 @@ The numerical ID of the type in this profile.
 ### name
 
 The name of the this type.
+
+### report
+
+Produce a report about this `Type`, accepts these named arguments:
+
+  * bold - bolden if possible (default: not)
+
+  * header - show a header (default: not)
 
 ### type-links
 

@@ -1,6 +1,16 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+    - Add ::Profile.report method, for generating
+      configurable report.  Also add ::Routine.report and
+      ::Type.report methods with similar functionality
+    - Add ::Routine.file-line/name-file-line methods for
+      consistent display of source reference
+    - Add ::Type.allocated method with a total count of
+      allocations
+    - Add ::Type.allocated-by-routine method that returns a
+      Bag of ::Routine objects and the number of allocations
+    - And some internal overhaul
 
 0.0.5  2026-01-11T21:24:52+01:00
     - Rename "Callable" to "Block" in documentation, as that

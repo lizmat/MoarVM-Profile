@@ -1,7 +1,7 @@
 use v6.*;  # want nano
 
 use DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>;
-use JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>;
+use JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>;  # from-json
 
 #- private subroutines ---------------------------------------------------------
 my str @names = "";
@@ -50,8 +50,9 @@ my sub run-code($file, *@args) {
 my constant $BON  = "\e[1m";
 my constant $BOFF = "\e[22m";
 
-# Bold some texts
-my sub bold(Str() $text) { $BON ~ $text ~ $BOFF }  # UNCOVERABLE
+# Bold some texts (or not)
+my sub bold( Str() $text) { $BON ~ $text ~ $BOFF }  # UNCOVERABLE
+my sub plain(Str() $text) {        $text         }  # UNCOVERABLE
 
 # Convert nano-seconds to milliseconds
 my sub milli(int $nano, $width? is copy) {
@@ -193,7 +194,10 @@ class MoarVM::Profile::Overview does DefaultParts {
 class MoarVM::Profile::Type {
     has @!parts   is built(:bind);
     has $!profile is built;
+    has $!calls;
     has $!allocations;
+    has $!allocated;
+    has $!allocated-by-routine;
 
     multi method new(MoarVM::Profile::Type: $profile, @a) {
         self.bless(:$profile, :parts(  # UNCOVERABLE
@@ -224,11 +228,57 @@ class MoarVM::Profile::Type {
         ($_ := @!parts[3]) ~~ Str ?? ($_ = from-json($_).Map) !! $_
     }
 
-    multi method gist(MoarVM::Profile::Type:D: --> Str:D) {
-        "$.id: $.name $.extra-info"
+    method report(MoarVM::Profile::Type:D:
+      Bool() :$bold,
+      Bool() :$header,
+      Int:D  :$limit = 5,
+    --> Str:D) {
+        my &bold       = $bold ?? &UNIT::bold !! &plain;
+        my %allocated := self.allocated-by-routine;
+
+        my str @parts;
+        my sub add(str $text) { @parts.push($text) }
+
+        add "Allocations  Name / Routines\n" if $header;
+        add "&bold(self.allocated.fmt('%11d'))  &bold(self.name) at ";
+
+        if %allocated.elems > 1 {
+            add "&bold(%allocated.elems()) call sites:\n";
+            for %allocated.sort(-*.value).head($limit) {
+                add "&bold(.value.fmt('%11d'))  $_.key.name-file-line(:$bold)\n";
+            }
+        }
+        else {
+            add "%allocated.head.key.file-line()\n";
+        }
+
+        @parts.join
     }
 
-    method allocations(MoarVM::Profile::Type:D: --> List:D) {
+    multi method gist(MoarVM::Profile::Type:D: --> Str:D) {
+        self.report(:header)
+    }
+
+    method allocated-by-routine(MoarVM::Profile::Type:D: --> Bag:D) {
+        $!allocated-by-routine // do {
+            my %allocations := self.allocations;
+            my @routines    := $!profile.routines;
+
+            $!allocated-by-routine := self.calls.map({
+                @routines[.routine-id] => %allocations{.id}.count
+            }).Bag
+        }
+    }
+
+    method calls(MoarVM::Profile::Type:D: --> List:D) {
+        $!calls // ($!calls := $!profile.calls[self.allocations.keys].List)
+    }
+
+    method allocated(MoarVM::Profile::Type:D: --> Int:D) {
+        $!allocated // ($!allocated := self.allocations.values.map(*.count).sum)
+    }
+
+    method allocations(MoarVM::Profile::Type:D: --> Map:D) {
         $!allocations // do {
             my constant $query = "SELECT "
               ~ MoarVM::Profile::Allocation.columns
@@ -236,9 +286,10 @@ class MoarVM::Profile::Type {
               ~ MoarVM::Profile::Allocation.table
               ~ " WHERE type_id = ?";
 
-            $!allocations := $!profile.query($query, self.id).arrays.map({
-                MoarVM::Profile::Allocation.new($_)
-            }).List
+            $!allocations := my %allocations is Map =
+              $!profile.query($query, self.id).arrays.map: {
+                .head => MoarVM::Profile::Allocation.new($_)
+            }
         }
     }
 }
@@ -265,7 +316,9 @@ class MoarVM::Profile::Type {
 
 class MoarVM::Profile::Call does DefaultParts {
     has $!profile is built;
+    has $!routine;
     has $!allocations;
+    has $!allocated;
     has $!ancestry;
 
     multi method new(MoarVM::Profile::Call: $profile, @a) {
@@ -281,6 +334,9 @@ class MoarVM::Profile::Call does DefaultParts {
         >
     }
 
+    method routine(MoarVM::Profile::Call:D:) {
+        $!routine // ($!routine := $!profile.routines[self.routine-id])
+    }
     method allocations(MoarVM::Profile::Call:D: --> List:D) {
         $!allocations // do {
             my constant $query = "SELECT "
@@ -468,6 +524,16 @@ class MoarVM::Profile::Routine {
         }
     }
     method file(MoarVM::Profile::Routine:D: --> str ) { @names[@!parts[3]] }
+
+    method file-line(MoarVM::Profile::Routine:D: --> str) {
+        @names[@!parts[3]] ~ ":" ~ @!parts[2]
+    }
+    method name-file-line(MoarVM::Profile::Routine:D: :$bold --> str) {
+        my &bold = $bold ?? &UNIT::bold !! &plain;
+        (my int $index = @!parts[1])
+          ?? bold(@names[$index]) ~ " " ~ self.file-line
+          !! self.file-line
+    }
     method io(  MoarVM::Profile::Routine:D: --> IO:D) { file2io self.file  }
 
     method is-block(MoarVM::Profile::Routine:D: --> Bool:D) { @!parts[1] == 0 }
@@ -489,15 +555,19 @@ class MoarVM::Profile::Routine {
             !! 'interp'
     }
 
-    multi method gist(MoarVM::Profile::Routine:D: :$bold, :$header --> Str:D) {
+    multi method gist(MoarVM::Profile::Routine:D: --> Str:D) {
+        self.report(:header)
+    }
+
+    method report(MoarVM::Profile::Routine:D: :$bold, :$header --> Str:D) {
         my $*BOLD;  # don't want auto-bolding here
         my int $total-time = $!profile.overviews.head.total-time;
 
-        my $line1 := sprintf "%s %s  %s  %s  %s",
-          self.entries.fmt('%9d'),
+        my $line1 := sprintf "%9d %s  %s  %6s  %s",
+          self.entries,
           percent(self.inclusive-time / $total-time, 10),
           percent(self.exclusive-time / $total-time, 10),
-          self.execution-type.fmt("%6s"),
+          self.execution-type,
           self.name;
         my $line2 := sprintf "           %s  %s %s  %s",
           milli(self.inclusive-time, 10),
@@ -506,9 +576,10 @@ class MoarVM::Profile::Routine {
           self.file ~ ':' ~ self.line;
 
         $line1 := bold($line1) if $bold;
+        my $text := "$line1\n$line2\n";
         $header
-          ?? "  Entries    Inclusive    Exclusive   Exec  Name\n$line1\n$line2"
-          !! "$line1\n$line2"
+          ?? "  Entries    Inclusive    Exclusive   Exec  Name\n$text"
+          !! $text
     }
 
     method calls(MoarVM::Profile::Routine:D: --> List:D) {
@@ -676,92 +747,8 @@ class MoarVM::Profile:ver<0.0.5>:auth<zef:lizmat> {
         ))
     }
 
-    multi method gist(MoarVM::Profile:D: :bold($*BOLD) --> Str:D) {
-        my &bold = $*BOLD ?? &UNIT::bold !! -> $_ { $_ }
-
-        my $overview   := self.overviews(1);
-        my $total-time := $overview.total-time;
-        my $spesh-time := $overview.spesh-time;
-
-        my $gc-overview   := self.gc-overview;
-        my $total-gc-time := $gc-overview.total;
-
-        my $calls-overview    := self.calls-overview;
-        my $calls-total       := $calls-overview.entries-total;
-        my $spesh-total       := $calls-overview.spesh-entries-total;
-        my $inlined-total     := $calls-overview.inlined-entries-total;
-        my $jit-total         := $calls-overview.jit-entries-total;
-        my $entered-total     := $calls-total - $inlined-total;
-        my $interpreted-total := $calls-total - $spesh-total;
-        my $spesh-jit-total   := $spesh-total + $jit-total;
-        my $osr-total         := $calls-overview.osr-total;
-        my $deopt-one-total   := $calls-overview.deopt-one-total;
-        my $deopt-all-total   := $calls-overview.deopt-all-total;
-
-        my $gcs := self.gcs;
-
-        my $allocations-overview := self.allocations-overview;
-        my $replaced  := $allocations-overview.replaced;
-        my $allocated := $allocations-overview.allocated - $replaced;
-
-        my str @parts;
-        my sub add(str $text) { @parts.push($text) }
-
-        add "MoarVM Profiler Results";
-        add "=======================";
-        add $!target ~~ IO
-          ?? $!target.extension eq 'db' | 'sql'
-            ?? "&bold($!target) (created &datetime($!target.created))"
-            !! "&bold($!target) (changed &datetime($!target.changed))"
-          !! bold($!target);
-
-        add "";
-        add "Time Spent";
-        add "==========";
-        add "The profiled code ran for &milli($total-time).";
-        add "Of this, &milli($total-gc-time) were spent in garbage collection (that's &percent($total-gc-time / $total-time)).";
-        add "The dynamic optimizer was active for &percent($spesh-time / $total-time) of the program's run time.";
-
-        add "";
-        add "Call Frames";
-        add "===========";
-        add "In total, &bold("$entered-total call frames") were entered and exited by the profiled code.";
-        add "Inlining eliminated the need to create &bold("$inlined-total call frames") (that's &percent($inlined-total / $calls-total)).";
-        add "&bold($interpreted-total) call frames were interpreted, &bold($spesh-total) were specialized (&percent($spesh-total / $calls-total)).";
-
-        add "";
-        add "Garbage Collection";
-        add "==================";
-        add "The profiled code did &bold("$gcs.elems() garbage collections").";
-        add "There were &bold("$gcs.grep(*.full).elems() full collections") involving the entire heap.";
-        add "The average nursery collection time was &milli($gc-overview.avg-minor-time).";
-        add "Scalar replacement eliminated &bold($replaced) allocations (that's &percent($replaced / $allocated)).";
-
-        add "";
-        add "Dynamic Optimization";
-        add "====================";
-        add "Of $spesh-jit-total optimized frames, there were &bold("$deopt-one-total deoptimizations") (that's &percent($deopt-one-total / $spesh-jit-total)).";
-        add $deopt-all-total
-          ?? $deopt-all-total == 1
-            ?? "There was &bold("one global deoptimization")."
-            !! "There were &bold("$deopt-all-total global deoptimizations")."
-          !! "There was &bold("no global deoptimization") triggered.";
-        add $osr-total == 1
-          ?? "There was &bold("one On Stack Replacement") performed."
-          !! "There were &bold("$osr-total On Stack Replacements") performed.";
-
-        add "";
-
-        add "Routines";
-        add "========";
-        @parts.append: self.routines
-          .grep({ $_ &&  (.spesh-entries || .jit-entries || .entries > 1) })
-          .sort(-*.inclusive-time)
-          .head(10)
-          .map(*.gist(:bold($*BOLD), :header(!$++)));
-        add "";
-
-        @parts.join("\n")
+    multi method gist(MoarVM::Profile:D: --> Str:D) {
+        self.report
     }
 
     method files(MoarVM::Profile:D:) {
@@ -799,6 +786,114 @@ class MoarVM::Profile:ver<0.0.5>:auth<zef:lizmat> {
         }
 #say $query;  # for debugging
         $!db.query($query, |c)
+    }
+
+    method report(MoarVM::Profile:D:
+      Bool() :bold($*BOLD),
+      Int:D  :$routines          = 5,
+      Int:D  :$types             = 5,
+      Int:D  :$routines-per-type = 3,
+    --> Str:D) {
+        my &bold = $*BOLD ?? &UNIT::bold !! &plain;
+
+        my $overview   := self.overviews(1);
+        my $total-time := $overview.total-time;
+        my $spesh-time := $overview.spesh-time;
+
+        my $gc-overview   := self.gc-overview;
+        my $total-gc-time := $gc-overview.total;
+
+        my $calls-overview    := self.calls-overview;
+        my $calls-total       := $calls-overview.entries-total;
+        my $spesh-total       := $calls-overview.spesh-entries-total;
+        my $inlined-total     := $calls-overview.inlined-entries-total;
+        my $jit-total         := $calls-overview.jit-entries-total;
+        my $entered-total     := $calls-total - $inlined-total;
+        my $interpreted-total := $calls-total - $spesh-total;
+        my $spesh-jit-total   := $spesh-total + $jit-total;
+        my $osr-total         := $calls-overview.osr-total;
+        my $deopt-one-total   := $calls-overview.deopt-one-total;
+        my $deopt-all-total   := $calls-overview.deopt-all-total;
+
+        my $gcs := self.gcs;
+
+        my $allocations-overview := self.allocations-overview;
+        my $replaced  := $allocations-overview.replaced;
+        my $allocated := $allocations-overview.allocated - $replaced;
+
+        my str @parts;
+        my sub add(str $text) { @parts.push($text) }
+
+        add "MoarVM Profiler Results at &datetime(now)";
+        add "=" x 80;
+        add $!target ~~ IO
+          ?? $!target.extension eq 'db' | 'sql'
+            ?? "&bold($!target) (created &datetime($!target.created))"
+            !! "&bold($!target) (changed &datetime($!target.changed))"
+          !! bold($!target);
+
+        add "";
+        add "Time Spent";
+        add "=" x 80;
+        add "The profiled code ran for &milli($total-time).";
+        add "Of this, &milli($total-gc-time) were spent in garbage collection (that's &percent($total-gc-time / $total-time)).";
+        add "The dynamic optimizer was active for &percent($spesh-time / $total-time) of the program's run time.";
+
+        add "";
+        add "Call Frames";
+        add "=" x 80;
+        add "In total, &bold("$entered-total call frames") were entered and exited by the profiled code.";
+        add "Inlining eliminated the need to create &bold("$inlined-total call frames") (that's &percent($inlined-total / $calls-total)).";
+        add "&bold($interpreted-total) call frames were interpreted, &bold($spesh-total) were specialized (&percent($spesh-total / $calls-total)).";
+
+        add "";
+        add "Garbage Collection";
+        add "=" x 80;
+        add "The profiled code did &bold("$gcs.elems() garbage collections").";
+        add "There were &bold("$gcs.grep(*.full).elems() full collections") involving the entire heap.";
+        add "The average nursery collection time was &milli($gc-overview.avg-minor-time).";
+        add "Scalar replacement eliminated &bold($replaced) allocations (that's &percent($replaced / $allocated)).";
+
+        add "";
+        add "Dynamic Optimization";
+        add "=" x 80;
+        add "Of $spesh-jit-total optimized frames, there were &bold("$deopt-one-total deoptimizations") (that's &percent($deopt-one-total / $spesh-jit-total)).";
+        add $deopt-all-total
+          ?? $deopt-all-total == 1
+            ?? "There was &bold("one global deoptimization")."
+            !! "There were &bold("$deopt-all-total global deoptimizations")."
+          !! "There was &bold("no global deoptimization") triggered.";
+        add $osr-total == 1
+          ?? "There was &bold("one On Stack Replacement") performed."
+          !! "There were &bold("$osr-total On Stack Replacements") performed.";
+
+        add "";
+
+        if $routines -> $limit {
+            add "Routines";
+            add "=" x 80;
+            @parts.append: self.routines
+              .grep({ $_ &&  (.spesh-entries || .jit-entries || .entries > 1) })
+              .sort(-*.exclusive-time)
+              .head($limit)
+              .map(*.report(:bold($*BOLD), :header(!$++)));
+        }
+
+        if $types -> $limit {
+            add "Types";
+            add "=" x 80;
+            @parts.append: self.types
+              .grep(*.defined)
+              .sort(-*.allocated)
+              .head($limit)
+              .map(*.report(
+                     :bold($*BOLD),
+                     :header(!$++),
+                     :limit($routines-per-type)
+              ));
+        }
+
+        @parts.join("\n")
     }
 
     method routines(MoarVM::Profile:D: --> List:D) {
