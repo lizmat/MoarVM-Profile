@@ -1,6 +1,14 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+    - Add ::GC.report, and add reporting about GCs to the
+      ::Profile.report by default
+    - Quite a lot of reformatting in the reports
+    - Add possibility to specify number of items to show
+      in ::Profile.report, also in mvm-profile
+    - Add possibiluty to save database for code profiles
+    - Add ::Profile.source with the source that was used
+      to create the profile (also stored in database)
 
 0.0.6  2026-01-14T21:55:24+01:00
     - Add ::Profile.report method, for generating

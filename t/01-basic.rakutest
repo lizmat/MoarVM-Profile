@@ -1,16 +1,17 @@
 use Test;
 use MoarVM::Profile;
 
-plan 5 * 127 + 16;
+plan 5 * 126 + 16;
 
 my constant $times = 1000000;
 
-my sub test-object-sanity($object, $type) is test-assertion {
+my sub test-object-sanity($object, $type, :$report = False) is test-assertion {
     subtest "Testing sanity of $type.^name() object" => {
-        plan 6;
+        plan 6 + $report;
 
         isa-ok $object,$type;
         isa-ok $object.gist, Str;
+        isa-ok $object.report, Str if $report;
         isa-ok $object.table, Str;
         isa-ok $object.method-names, List;
         isa-ok $object.columns, Str;
@@ -34,6 +35,7 @@ for
 
     my $profile := MoarVM::Profile.new($target);
     isa-ok $profile, MoarVM::Profile;
+    isa-ok $profile.source, Str;
     isa-ok $profile.gist, Str;
     isa-ok $profile.report, Str;
     is-deeply $profile.target, $target, 'is the target correct?';
@@ -120,7 +122,7 @@ for
     ok $routines == 1, 'only one routine by this name and file';
 
     my $routine := $routines.head;
-    test-object-sanity $routine, MoarVM::Profile::Routine;
+    test-object-sanity $routine, MoarVM::Profile::Routine, :report;
 
     is-deeply $routine.name, 'foo', 'sub name is ok';
     is-deeply $routine.file, $file, 'file name is ok';
@@ -166,8 +168,6 @@ for
     todo("$inlined-entries < $spesh-entries on Intel???") unless $spesh-entries;
     ok $inlined-entries < $spesh-entries,  'fewer inlined entries';
     ok $exclusive-time  < $inclusive-time, 'exclusive time is less';
-
-    isa-ok $routine.report, Str;
 
 #- calls -----------------------------------------------------------------------
     my $calls := $routine.calls;
@@ -244,9 +244,9 @@ for
     ok ([==] $gcs.map(*.thread-id)),    'all with the same thread';
 
     my $gc := $gcs.head;
-    test-object-sanity($gc, MoarVM::Profile::GC);
+    test-object-sanity $gc, MoarVM::Profile::GC, :report;
 
-    ok $gc.responsible  == 1, 'it was a responsible garbage collection';
+    ok $gc.responsible  == 1, 'thread that initiated garbage collection';
     ok $gc.sequence-num == 1, 'first garbage collection';
     ok $gc.thread-id    == 1, 'only have one thread';
 
@@ -256,7 +256,7 @@ for
     ok $types == 1, 'only one type by this name';
 
     my $type := $types.head;
-    test-object-sanity $type, MoarVM::Profile::Type;
+    test-object-sanity $type, MoarVM::Profile::Type, :report;
     is $type.name, 'Scalar', 'name is ok';
 
     my $extra-info := $type.extra-info;
@@ -270,8 +270,6 @@ for
 
     my $type-links := $type.type-links;
     isa-ok $type-links, Map;
-
-    isa-ok $routine.report, Str;
 
     $allocations := $type.allocations;
     isa-ok $allocations, Map;

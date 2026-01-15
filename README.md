@@ -218,6 +218,8 @@ Produce a report about this profile, allowing for these named arguments:
 
   * :routines-per-type - # of routines per type (default: 3)
 
+  * :gcs - # of garbage collections (default: 5)
+
 ### routines
 
 Returns a `List` of `MoarVM::Profile::Routine` objects, where the index of the object is the same as the `.id` of the object.
@@ -461,6 +463,14 @@ Methods
 ### full
 
 **1** if this was a full garbage collection, else **0**.
+
+### report
+
+Produce a report about this `GC`, accepts these named arguments:
+
+  * bold - bolden if possible (default: not)
+
+  * header - show a header (default: not)
 
 ### responsible
 

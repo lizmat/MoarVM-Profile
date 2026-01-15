@@ -1,5 +1,41 @@
 use MoarVM::Profile;
+my %SUB-MAIN-OPTS = :named-anywhere, :allow-no;
 
-say MoarVM::Profile.new(~@*ARGS).report(:bold($*OUT.t));
+my sub meh(str $message) {
+    note $message;
+    exit 1;
+}
+
+my sub MAIN(
+    :$routines          = 5, #= number of routines to show
+    :$types             = 5, #= number of types to show
+    :$routines-per-type = 3, #= number of routines/type
+    :$gcs               = 5, #= number of gcs to show
+    :$keep,                  #= keep result of code profile in NNNNNNN.db
+    *@args                   #= filename or code to profile
+) {
+
+    my sub report($profile) {
+        say $profile.report(
+          :bold($*OUT.t),
+          :$routines,
+          :$types,
+          :$routines-per-type,
+          :$gcs
+        );
+        exit 0;
+    }
+
+    if @args == 1 {
+        my $file := @args.head;
+        if $file.ends-with('.sql' | '.db') {
+            my $io := $file.IO;
+            $io.e
+              ?? report MoarVM::Profile.new($io, :$keep)
+              !! meh "'$file' does not appear to be a valid file";
+        }
+    }
+    report MoarVM::Profile.new(~@args, :$keep);
+}
 
 # vim: expandtab shiftwidth=4

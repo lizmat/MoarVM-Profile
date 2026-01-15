@@ -238,6 +238,7 @@ Produce a report about this profile, allowing for these named arguments:
 =item :routines - # of routines to show (default: 5)
 =item :types - # of types with allocations to show (default: 5)
 =item :routines-per-type - # of routines per type (default: 3)
+=item :gcs - # of garbage collections (default: 5)
 
 =head3 routines
 
@@ -458,6 +459,13 @@ An object containing information about a garbage collection run.
 =head3 full
 
 B<1> if this was a full garbage collection, else B<0>.
+
+=head3 report
+
+Produce a report about this C<GC>, accepts these named arguments:
+
+=item bold - bolden if possible (default: not)
+=item header - show a header (default: not)
 
 =head3 responsible
 
