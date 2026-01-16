@@ -9,6 +9,12 @@ Revision history for MoarVM::Profile
     - Add possibiluty to save database for code profiles
     - Add ::Profile.source with the source that was used
       to create the profile (also stored in database)
+    - Add ::Type.count/jit/spesh/replaced methods for
+      number of (unnecessary) allocations
+    - Allow profile creation from a DB::SQLite object
+    - Allow a profile to be made without any source code:
+      this will profile start-up time, including any
+      modules through -M and/or ENV<RAKUDO_OPT>.
 
 0.0.6  2026-01-14T21:55:24+01:00
     - Add ::Profile.report method, for generating

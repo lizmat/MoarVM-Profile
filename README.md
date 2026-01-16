@@ -17,62 +17,60 @@ my $profile = MoarVM::Profile(
 say $profile;
 ```
 
-    MoarVM Profiler Results at 2026-01-14T21:09:44+01:00
+    MoarVM Profiler Results at 2026-01-16T21:00:43+01:00
     ================================================================================
     sub foo($a) { $a * $a }; foo($_) for ^1000000
 
     Time Spent
     ================================================================================
-    The profiled code ran for 127.33ms.
-    Of this, 24.79ms were spent in garbage collection (that's 19.47%).
-    The dynamic optimizer was active for 0.52% of the program's run time.
+    The profiled code ran for 135.22ms.
+    Of this, 29.48ms were spent in garbage collection (that's 21.80%).
+    The dynamic optimizer was active for 0.54% of the program's run time.
 
     Call Frames
     ================================================================================
-    In total, 5619 call frames were entered and exited by the profiled code.
-    Inlining eliminated the need to create 2997075 call frames (that's 99.81%).
-    5205 call frames were interpreted, 2997489 were specialized (99.83%).
+    In total, 5742 call frames were entered and exited by the profiled code.
+    Inlining eliminated the need to create 2996952 call frames (that's 99.81%).
+    5293 call frames were interpreted, 2997401 were specialized (99.82%).
 
     Garbage Collection
     ================================================================================
     The profiled code did 19 garbage collections.
-    There were 0 full collections involving the entire heap.
-    The average nursery collection time was 1.30ms.
-    Scalar replacement eliminated 999167 allocations (that's 33.28%).
+    The average nursery collection time was 1.55ms.
+    Scalar replacement eliminated 999137 allocations (that's 33.28%).
 
     Dynamic Optimization
     ================================================================================
-    Of 2997489 optimized frames, there were 0 deoptimizations (that's 0%).
-    There was no global deoptimization triggered.
+    2997401 optimized frames were seen.
     There was one On Stack Replacement performed.
 
-    Routines
+    157 Routines (showing 5 with most CPU usage)
     ================================================================================
       Entries    Inclusive    Exclusive   Exec  Name
-            1      79.02%       25.54%   spesh  <unit>
-                  100.61ms      32.52ms    OSR  -e:1
+      1000000      33.46%       20.14%   spesh  infix:<*>
+                   45.25ms      27.24ms         SETTING::src/core.c/Int.rakumod:348
 
-      1000000      33.12%       18.98%   spesh  infix:<*>
-                   42.18ms      24.16ms         SETTING::src/core.c/Int.rakumod:348
+      1000000      50.10%       16.55%   spesh  foo
+                   67.74ms      22.38ms         -e:1
 
-      1000000      50.83%       17.62%   spesh  foo
-                   64.72ms      22.43ms         -e:1
+      1000000      65.74%       15.62%   spesh  (block)
+                   88.90ms      21.12ms         -e:1
 
-      1000000      67.60%       16.74%   spesh  (block)
-                   86.07ms      21.31ms         -e:1
+           57       0.28%        0.14%  interp  (block)
+                    0.37ms       0.19ms         src/vm/moar/dispatchers.nqp:1125
 
-           57       0.27%        0.14%  interp  (block)
-                    0.34ms       0.18ms         src/vm/moar/dispatchers.nqp:1125
+          166       0.29%        0.13%  interp  find_method
+                    0.40ms       0.17ms         src/Perl6/Metamodel/MROBasedMethodDispatch.nqp:13
 
-    Types
+    24 Types (showing 5 most allocated)
     ================================================================================
     Allocations  Name / Routines
         1999981  Int at 2 call sites:
          999996  infix:<*> SETTING::src/core.c/Int.rakumod:348
          999985  -e:1
 
-            844  Scalar at 7 call sites:
-            833  foo -e:1
+            874  Scalar at 7 call sites:
+            863  foo -e:1
               3  POPULATE SETTING::src/core.c/Exception.rakumod:1092
               2  backtrace SETTING::src/core.c/Exception.rakumod:10
 
@@ -83,18 +81,31 @@ say $profile;
 
             463  BOOTTracked at 21 call sites:
              77  src/vm/moar/dispatchers.nqp:3925
-             66  NQP::src/core/dispatchers.nqp:273
              66  src/vm/moar/dispatchers.nqp:3431
+             66  NQP::src/core/dispatchers.nqp:273
 
             451  BOOTHash at 24 call sites:
             332  find_method src/Perl6/Metamodel/MROBasedMethodDispatch.nqp:13
              24  capture SETTING::src/core.c/Parameter.rakumod:297
              16  slurpy SETTING::src/core.c/Parameter.rakumod:288
 
+    19 Garbage Collections (showing 5 slowest)
+    ================================================================================
+        time seq# F  started  retained  promoted     freed    gen2
+      2.84ms    1     3.94ms      18Kb     786Kb    3290Kb    7545 roots
+
+      2.61ms   16   108.07ms       80b              4095Kb      13 roots
+
+      2.02ms    2    11.84ms       80b      18Kb    4077Kb     131 roots
+
+      1.85ms   17   116.64ms       80b              4095Kb      13 roots
+
+      1.52ms   18   124.06ms       80b              4095Kb      13 roots
+
 or use the installed script **mvm-profile**:
 
     $ mvm-profile 'sub foo($a) { $a * $a }; foo($_) for ^1000000'
-    MoarVM Profiler Results at 2026-01-14T21:09:44+01:00
+    MoarVM Profiler Results at 2026-01-16T21:00:43+01:00
     ================================================================================
     sub foo($a) { $a * $a }; foo($_) for ^1000000
 
@@ -109,7 +120,12 @@ The `MoarVM::Profile` distribution provides a Raku interface for the information
 MoarVM::Profile
 ===============
 
-The main class provided by this distribution is the `MoarVM::Profile` class. Instantiation happens with the `.new` method, which may take:
+The main class provided by this distribution is the `MoarVM::Profile` class. Instantiation happens with the `.new` method, which takes one positional argument, and several named arguments.
+
+Positional argument
+-------------------
+
+One of the following:
 
 ### string with code to be executed
 
@@ -128,6 +144,31 @@ Creates the `MoarVM::Profile` object from the pre-generated SQL in the given `IO
 ### path to pre-generated database file (extension: .db)
 
 Creates the `MoarVM::Profile` object from the given SQLite database.
+
+### a `DB::SQLite` object with a profile database
+
+Creates the `MoarVM::Profile` object from the given `DB::SQLite` object.
+
+Named arguments
+---------------
+
+### :keep
+
+If specified with a trueish value, will create a permanent copy of the underlying database (if applicable). If the value is a string, then it will be assumed to be the name of the directory in which to store the permanent copy of the database. If a `Bool`, then the current directory will be assumed.
+
+The basename of the database is the number of nano-seconds since epoch. The extension is `.db`.
+
+### :type
+
+The type of profile to make: supported are:
+
+  * profile (default)
+
+Profile all execution, including compilation.
+
+  * profile-compile
+
+Just profile the compilation of the code.
 
 Methods
 -------
@@ -298,17 +339,25 @@ An object containing allocation information about a given `MoarVM::Profile::Call
 Methods
 -------
 
-  * count
-
-  * jit
-
-  * replaced
-
-  * spesh
-
 ### call-id
 
 ID of the associated `MoarVM::Profile::Call` object.
+
+### count
+
+The number of allocations made for the associated `MoarVM::Profile::Call` and `MoarVM::Profile::Type` object.
+
+### jit
+
+The number of allocations made for the associated `MoarVM::Profile::Call` and `MoarVM::Profile::Type` object while the code in fact was JITted.
+
+### spesh
+
+The number of allocations made for the associated `MoarVM::Profile::Call` and `MoarVM::Profile::Type` object while the code in fact was speshed.
+
+### replaced
+
+The number of allocations that did **not** needed to be made for the associated `MoarVM::Profile::Call` and `MoarVM::Profile::Type` object because a scalar replacement made it unnecessary to do an allocation.
 
 ### type-id
 
@@ -703,6 +752,10 @@ Returns a `Map` with `MoarVM::Profile::Allocation` objects for this type, keyed 
 
 Returns a `List` with `MoarVM::Profile::Call` objects of the `Block`s in which allocations for this type were made.
 
+### count
+
+The total number of allocations made for the this type.
+
 ### extra-info
 
 A `Map` with extra information about this type.
@@ -711,9 +764,17 @@ A `Map` with extra information about this type.
 
 The numerical ID of the type in this profile.
 
+### jit
+
+The total number of allocations made for this type while the code in fact was JITted.
+
 ### name
 
 The name of the this type.
+
+### replaced
+
+The total number of allocations that did **not** needed to be made for the type because a scalar replacement made it unnecessary to do an allocation.
 
 ### report
 
@@ -722,6 +783,10 @@ Produce a report about this `Type`, accepts these named arguments:
   * bold - bolden if possible (default: not)
 
   * header - show a header (default: not)
+
+### spesh
+
+The total number of allocations made for this type while the code in fact was speshed.
 
 ### type-links
 

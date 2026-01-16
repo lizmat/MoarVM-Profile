@@ -30,14 +30,14 @@ my sub gist($self --> Str:D) {
 
 # The logic for running code and creating a profile from it, and
 # if something went wrong, showing the error (otherwise mute STDERR)
-my sub run-code($file, *@args) {
+my sub run-code($file, *@args, :$type = 'profile') {
 
     # Run the code, switching off any coverage as that is incompatible
     # with profiling
     my %env = %*ENV;
     %env<MVM_COVERAGE_LOG>:delete;
 
-    my $proc := run $*EXECUTABLE, "--profile=$file", |@args, :err, :%env;
+    my $proc := run $*EXECUTABLE, "--$type=$file", |@args, :err, :%env;
     if $proc.exitcode -> $exit {
 
         note $proc.err.slurp.chomp;  # UNCOVERABLE
@@ -78,7 +78,7 @@ my sub datetime(Instant:D $then) {
     $then.DateTime.Str.subst(/ \.\d+ /)
 }
 
-# Convert a bytes value into appropriate 
+# Convert a bytes value into appropriate string
 my sub bytes(int $bytes) {
     $bytes  # UNCOVERABLE
       ?? $bytes < 1024
@@ -163,7 +163,7 @@ class MoarVM::Profile::Allocation does DefaultParts {
 class MoarVM::Profile::AllocationsOverview does DefaultParts {
     method table(--> 'allocations') { }
     method method-names() is implementation-detail {
-        BEGIN <counted speshed jitted allocated replaced> 
+        BEGIN <counted speshed jitted allocated replaced>
     }
     method select(--> Str:D) { q:to/SQL/ }
 SELECT
@@ -205,17 +205,22 @@ class MoarVM::Profile::Overview does DefaultParts {
 #  type_links JSON
 # );
 class MoarVM::Profile::Type {
-    has @!parts   is built(:bind);
-    has $!profile is built;
-    has $!calls;
-    has $!allocations;
-    has $!allocated;
-    has $!allocated-by-routine;
+    has int @!parts      is built(:bind);
+    has     $!profile    is built(:bind);
+    has     $!extra-info is built;;
+    has     $!type-links is built;;
+    has     $!calls;
+    has     $!allocations;
+    has     $!allocated;
+    has     $!allocated-by-routine;
 
     multi method new(MoarVM::Profile::Type: $profile, @a) {
-        self.bless(:$profile, :parts(  # UNCOVERABLE
-          (@a[0].Int, name2index(@a[1]), @a[2], @a[3])
-        ))
+        self.bless(
+          :$profile,
+          :parts(my int @ = @a[0].Int, name2index(@a[1])),
+          :extra-info(@a[2]),
+          :type-links(@a[3])
+        )
     }
 
     method table(--> 'types') { }
@@ -235,10 +240,24 @@ class MoarVM::Profile::Type {
     method name(MoarVM::Profile::Type:D:) { @names[@!parts[1]] }
 
     method extra-info(MoarVM::Profile::Type:D:) {
-        ($_ := @!parts[2]) ~~ Str ?? ($_ = from-json($_).Map) !! $_
+        ($_ := $!extra-info) ~~ Str ?? ($_ = from-json($_).Map) !! $_
     }
     method type-links(MoarVM::Profile::Type:D:) {
-        ($_ := @!parts[3]) ~~ Str ?? ($_ = from-json($_).Map) !! $_
+        ($_ := $!type-links) ~~ Str ?? ($_ = from-json($_).Map) !! $_
+    }
+
+    # From .add-overview
+    method spesh(   MoarVM::Profile::Type:D: --> int) { @!parts[2] }
+    method jit(     MoarVM::Profile::Type:D: --> int) { @!parts[3] }
+    method count(   MoarVM::Profile::Type:D: --> int) { @!parts[4] }
+    method replaced(MoarVM::Profile::Type:D: --> int) { @!parts[5] }
+
+    # This adds the overview information from the calls table to the
+    # object, so that they can be accessed quickly in selecting and
+    # sorting operations
+    method add-overview(MoarVM::Profile::Type:D: @values
+    --> Nil) is implementation-detail {
+        @!parts.append(@values.map(*.Int))
     }
 
     method report(MoarVM::Profile::Type:D:
@@ -565,7 +584,7 @@ class MoarVM::Profile::Routine {
           ?? bold(@names[$index]) ~ " " ~ self.file-line
           !! self.file-line
     }
-    method io(  MoarVM::Profile::Routine:D: --> IO:D) { file2io self.file  }
+    method io(MoarVM::Profile::Routine:D: --> IO:D) { file2io self.file  }
 
     method is-block(MoarVM::Profile::Routine:D: --> Bool:D) { @!parts[1] == 0 }
 
@@ -625,9 +644,7 @@ class MoarVM::Profile::Routine {
             $io.slurp
         }
         else {
-            (my $target := $!profile.target) ~~ IO::Path
-              ?? Nil   # either .sql or .db without known source
-              !! $target
+            $!profile.source
         }
     }
 
@@ -637,7 +654,7 @@ class MoarVM::Profile::Routine {
             my int $line = $.line;
             my int $from = $line - $extra max 1;
             my int $to   = $line + $extra min +@lines;
-            
+
             ($from .. $to).map(-> $line {
                 "$line.fmt("\%$to.chars()d") @lines[$line - 1]"
             }).join
@@ -670,7 +687,7 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 }
 
 #- Profile creation ------------------------------------------------------------
-class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
+class MoarVM::Profile:ver<0.0.7>:auth<zef:lizmat> {
     has $.target;
     has $.db;
     has $!source;
@@ -683,6 +700,7 @@ class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
     has $!gc-overview;
     has $!routines;
     has $!types;
+    has $!types-most-allocated;
     has $!files;
     has $!ios;
     has $!names;
@@ -691,20 +709,43 @@ class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
     has $!user-names;
 
     proto method new(|) {*}
-    multi method new(IO:D $target where .e && .extension eq 'db', :keep($)) {
+    multi method new(
+      DB::SQLite:D $db,
+                   :keep($),
+    ) {
+        my $target := $db.filename.IO;
+        self.bless(:$target, :$db)
+    }
+
+    multi method new(
+      IO:D $target where .e && .extension eq 'db',
+           :keep($),
+           :type($)
+    ) {
         self.bless(:$target, :db(DB::SQLite.new(:filename(~$target), |%_)))
     }
-    multi method new(IO:D $target where .e && .extension eq 'sql', :$keep) {
+
+    multi method new(
+      IO:D $target where .e && .extension eq 'sql',
+          :$keep,
+          :type($)
+    ) {
         my $filename := $keep ?? ~$target.extension("db") !! "";
         my $db := DB::SQLite.new(:$filename, |%_);
         $db.execute($target.slurp);
 
         self.bless(:$target, :$db)
     }
-    multi method new(IO:D $target where .e, :$keep, :$actual-target) {
+
+    multi method new(
+      IO:D $target where .e,
+          :$keep,
+          :$actual-target,
+          :$type = 'profile'
+    ) {
         my $sql := $*TMPDIR.add(nano ~ ".sql");
 
-        my $proc     := run-code($sql, $target);
+        my $proc     := run-code($sql, $target, :$type);
         my $filename := $keep ?? $target.extension("db") !! "";
         my $db := DB::SQLite.new(:$filename, |%_);
         $db.execute($sql.slurp);
@@ -712,12 +753,16 @@ class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
 
         self.bless(:target($actual-target // $target), :$db)
     }
-    multi method new(Str:D $target, :$keep, |c) {
+    multi method new(
+      Str:D $target,
+           :$keep,
+           :$type = 'profile'
+    ) {
 
         # We can't dispatch properly on IO(), so we catch anything here
         # that looks like a file that needs to be run / loaded
-        unless $target.contains(/\s/) {
-            return self.new($_, |c, :actual-target($target))
+        if $target && !$target.contains(/\s/) {
+            return self.new($_, |%_, :actual-target($target))
               if .e given $target.IO;
         }
 
@@ -728,8 +773,8 @@ class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
             !! "$root.db"
           !! "";
         my $sql      := $*TMPDIR.add("$root.sql");
-        my $proc     := run-code($sql, "-e", $target);
-        my $db       := DB::SQLite.new(:$filename, |c);
+        my $proc     := run-code($sql, "-e", $target, :$type);
+        my $db       := DB::SQLite.new(:$filename, |%_);
         $db.execute($sql.slurp);
 
         $db.execute("CREATE TABLE meta(source TEXT)");
@@ -877,7 +922,7 @@ class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
             !! $target.changed
           !! $now
         );
-          
+
         add "MoarVM Profiler Results at &datetime($now)";
         add "=" x 80;
         if $target ~~ IO {
@@ -891,65 +936,72 @@ class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
         add "Time Spent";
         add "=" x 80;
         add "The profiled code ran for &milli($total-time).";
-        add "Of this, &milli($total-gc-time) were spent in garbage collection (that's &percent($total-gc-time / $total-time)).";
+        add "Of this, &milli($total-gc-time) were spent in garbage collection (that's &percent($total-gc-time / $total-time))."
+          if @gcs;
         add "The dynamic optimizer was active for &percent($spesh-time / $total-time) of the program's run time.";
 
         add "";
         add "Call Frames";
         add "=" x 80;
         add "In total, &bold("$entered-total call frames") were entered and exited by the profiled code.";
-        add "Inlining eliminated the need to create &bold("$inlined-total call frames") (that's &percent($inlined-total / $calls-total)).";
+        add "Inlining eliminated the need to create &bold("$inlined-total call frames") (that's &percent($inlined-total / $calls-total))."
+          if $inlined-total;
         add "&bold($interpreted-total) call frames were interpreted, &bold($spesh-total) were specialized (&percent($spesh-total / $calls-total)).";
 
-        add "";
-        add "Garbage Collection";
-        add "=" x 80;
-        add "The profiled code did &bold("@gcs.elems() garbage collections").";
-        if @gcs.grep(*.full).elems -> $full {
-            add "There were &bold("$full full collections") involving the entire heap.";  # UNCOVERABLE
+        if @gcs {
+            add "";
+            add "Garbage Collection";
+            add "=" x 80;
+            add "The profiled code did &bold("@gcs.elems() garbage collections").";
+            if @gcs.grep(*.full).elems -> $full {
+                add "There were &bold("$full full collections") involving the entire heap.";  # UNCOVERABLE
+            }
+            add "The average nursery collection time was &milli($gc-overview.avg-minor-time).";
+            add "Scalar replacement eliminated &bold($replaced) allocations (that's &percent($replaced / $allocated)).";
         }
-        add "The average nursery collection time was &milli($gc-overview.avg-minor-time).";
-        add "Scalar replacement eliminated &bold($replaced) allocations (that's &percent($replaced / $allocated)).";
 
-        add "";
-        add "Dynamic Optimization";
-        add "=" x 80;
+        if $spesh-jit-total {
+            add "";
+            add "Dynamic Optimization";
+            add "=" x 80;
 
-        add $deopt-one-total
-          ?? "Of &bold($spesh-jit-total) optimized frames, there were &bold("$deopt-one-total deoptimizations") (that's &percent($deopt-one-total / $spesh-jit-total))."
-          !! "&bold($spesh-jit-total) optimized frames were seen.";
-        if $deopt-all-total {
-            add $deopt-all-total == 1
-              ?? "There was &bold("one global deoptimization")."
-              !! "There were &bold("$deopt-all-total global deoptimizations").";
+            add $deopt-one-total
+              ?? "Of &bold($spesh-jit-total) optimized frames, there were &bold("$deopt-one-total deoptimizations") (that's &percent($deopt-one-total / $spesh-jit-total))."
+              !! "&bold($spesh-jit-total) optimized frames were seen.";
+            if $deopt-all-total {
+                add $deopt-all-total == 1
+                  ?? "There was &bold("one global deoptimization")."
+                  !! "There were &bold("$deopt-all-total global deoptimizations").";
+            }
+            if $osr-total {
+                add $osr-total == 1
+                  ?? "There was &bold("one On Stack Replacement") performed."
+                  !! "There were &bold("$osr-total On Stack Replacements") performed.";
+            }
         }
-        if $osr-total {
-            add $osr-total == 1
-              ?? "There was &bold("one On Stack Replacement") performed."
-              !! "There were &bold("$osr-total On Stack Replacements") performed.";
-        }
-        add "";
 
         if $routines -> $limit {
             my @routines := self.routines;
-            add $limit > @routines
+
+            add "";
+            add $limit < @routines
               ?? "@routines.elems() Routines (showing $limit with most CPU usage)"
-              !! "@routines.elems() Routine{"s" unless @routines == 1}";
+              !! "@routines.elems() Routines";
             add "=" x 80;
             @parts.append: self.routines
-              .grep({ $_ &&  (.spesh-entries || .jit-entries || .entries > 1) })
+              .grep({ $_ &&  (.entries > 1) })
               .sort(-*.exclusive-time)
               .head($limit)
               .map(*.report(:bold($*BOLD), :header(!$++)));
         }
 
         if $types -> $limit {
-            my @types := self.types;
-            add "@types.elems() Types (showing $limit most allocated)";
+            my @types := self.types-most-allocated;
+            add $limit < @types
+              ?? "@types.elems() Types (showing $limit most allocated)"
+              !! "@types.elems() Types";
             add "=" x 80;
             @parts.append: @types
-              .grep(*.defined)
-              .sort(-*.allocated)
               .head($limit)
               .map(*.report(
                      :bold($*BOLD),
@@ -958,8 +1010,10 @@ class MoarVM::Profile:ver<0.0.6>:auth<zef:lizmat> {
               ));
         }
 
-        if $gcs -> $limit {
-            add "@gcs.elems() Garbage Collections (showing $limit slowest)";
+        if @gcs && $gcs -> $limit {
+            add $limit < @gcs
+              ?? "@gcs.elems() Garbage Collections (showing $limit slowest)"
+              !! "@gcs.elems() Garbage Collections";
             add "=" x 80;
             @parts.append: @gcs
               .sort(-*.time)
@@ -1047,7 +1101,7 @@ SQL
 SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'
 SQL
               ?? self.query("SELECT source FROM meta").value
-              !! "No source known"
+              !! Nil
         )
     }
 
@@ -1070,8 +1124,27 @@ SQL
                 my $type := MoarVM::Profile::Type.new(self, $_);
                 @types[$type.id] := $type;
             }
+            @types[.head].add-overview(.skip)
+              for self.query(q:to/SQL/).arrays;
+SELECT
+  type_id,
+  TOTAL(spesh),
+  TOTAL(jit),
+  TOTAL(count),
+  TOTAL(replaced)
+FROM allocations
+GROUP BY type_id
+SQL
             $!types := @types.List
         }
+    }
+
+    method types-most-allocated(MoarVM::Profile:D: --> List:D) {
+        $!types-most-allocated // ($!types-most-allocated :=
+          self.types[self.query(q:to/SQL/).arrays.flat].List
+SELECT type_id FROM allocations GROUP BY type_id ORDER BY TOTAL(count) DESC
+SQL
+        )
     }
 
     method user-files(MoarVM::Profile:D:) {

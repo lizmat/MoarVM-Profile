@@ -1,7 +1,8 @@
 use Test;
+use DB::SQLite;
 use MoarVM::Profile;
 
-plan 5 * 126 + 16;
+plan 6 * 130 + 16;
 
 my constant $times = 1000000;
 
@@ -19,23 +20,61 @@ my sub test-object-sanity($object, $type, :$report = False) is test-assertion {
     }
 }
 
-#- profile ---------------------------------------------------------------------
+#- check profile ---------------------------------------------------------------
 my $foo-raku := $*PROGRAM.sibling("foo.raku");
 my $code     := qq/sub foo(\$a) \{ \$a * \$a }\nfoo(\$_) for ^$times\n/;
 my $around   := qq/1 sub foo(\$a) \{ \$a * \$a }\n2 foo(\$_) for ^$times\n/;
+my $sql-raku := $*PROGRAM.sibling("foo.sql");
+my $db-raku  := $*PROGRAM.sibling("foo.db");
 
 for
-  'code', $code,      '-e',
-  'io',   $foo-raku,  ~$foo-raku,
-  'path', ~$foo-raku, ~$foo-raku,
-  'SQL',  $*PROGRAM.sibling("foo.sql"), '-e',
-  'db',   $*PROGRAM.sibling("foo.db"),  '-e'
+  'code',     $code,      '-e',
+  'io',       $foo-raku,  ~$foo-raku,
+  'path',     ~$foo-raku, ~$foo-raku,
+  'SQL-file', $sql-raku,  '-e',
+  'db-file',  $db-raku,   '-e'
 -> $source, $target, $file {
+    test-target($source, $target, $file);
+}
+
+my $db := DB::SQLite.new(:filename(~$db-raku));
+test-target('db-obj', $db, '-e', $db-raku);
+
+#- other checks ----------------------------------------------------------------
+my $profile := MoarVM::Profile.new($*PROGRAM.sibling("foo.db"));
+is $profile.routines.head.name, '(block)', 'an unnamed routine';
+dies-ok { $profile.query("not a valid SQL query") }, 'a wrong SQL query dies';
+dies-ok { $profile.routines(:foo<bar>) }, 'unhandled named arg in routines';
+dies-ok { $profile.types(:foo<bar>) },    'unhandled named arg in types';
+
+for
+  {:name<foo>,},
+  {:name<foo>, :file<-e>},
+  {:file<-e>,},
+  {:file<-e>, :line(1)}
+{
+    my $routines := $profile.routines(|$_);
+    isa-ok $routines, List;
+    ok +$routines, "$_.gist() produced $routines.elems() entries";
+}
+
+isa-ok file2io("SETTING::src/core.c/Int.rakumod"), IO::Path;
+isa-ok file2io("-e"), Failure;
+isa-ok file2io("not-existing-path"), Failure;
+ok file2io("src/main.nqp").ends-with("src/main.nqp"),
+  "other system paths also handled ok";
+
+#- test-target -----------------------------------------------------------------
+my sub test-target($source, $argument, $file, $target = $argument) {
     diag "Testing profile from $source";
 
-    my $profile := MoarVM::Profile.new($target);
+    my $profile := MoarVM::Profile.new($argument);
     isa-ok $profile, MoarVM::Profile;
-    isa-ok $profile.source, Str;
+    given $profile.source {
+        $_
+          ?? isa-ok $_, Str
+          !! is-deeply $_, Nil, 'no source available';
+    }
     isa-ok $profile.gist, Str;
     isa-ok $profile.report, Str;
     is-deeply $profile.target, $target, 'is the target correct?';
@@ -138,11 +177,12 @@ for
     is $routine.file-line,      "$file:1",     'file-line is ok';
     is $routine.name-file-line, "foo $file:1", 'is name-file-line ok';
 
-    if $target.ends-with(".sql" | ".db") {
+    if $target ~~ IO && $target.extension eq 'sql' {
         is-deeply $routine.source, Nil,       'no source with .sql or .db';
         is-deeply $routine.lines-around, Nil, 'and no lines around either';
     }
     else {
+dd $target;
         is $routine.source,       $code,   'did we get the right source';
         is $routine.lines-around, $around, 'did we get the right around';
     }
@@ -259,6 +299,11 @@ for
     test-object-sanity $type, MoarVM::Profile::Type, :report;
     is $type.name, 'Scalar', 'name is ok';
 
+    isa-ok $type.spesh,    Int;
+    isa-ok $type.jit,      Int;
+    isa-ok $type.count,    Int;
+    isa-ok $type.replaced, Int;
+
     my $extra-info := $type.extra-info;
     isa-ok $extra-info, Map;
 
@@ -283,28 +328,5 @@ for
     ok $allocation.spesh < $times, 'with an expected number of spesh count';
     ok $allocation.count < $times, 'with an expected count';
 }
-
-my $profile := MoarVM::Profile.new($*PROGRAM.sibling("foo.db"));
-is $profile.routines.head.name, '(block)', 'an unnamed routine';
-dies-ok { $profile.query("not a valid SQL query") }, 'a wrong SQL query dies';
-dies-ok { $profile.routines(:foo<bar>) }, 'unhandled named arg in routines';
-dies-ok { $profile.types(:foo<bar>) },    'unhandled named arg in types';
-
-for
-  {:name<foo>,},
-  {:name<foo>, :file<-e>},
-  {:file<-e>,},
-  {:file<-e>, :line(1)}
-{
-    my $routines := $profile.routines(|$_);
-    isa-ok $routines, List;
-    ok +$routines, "$_.gist() produced $routines.elems() entries";
-}
-
-isa-ok file2io("SETTING::src/core.c/Int.rakumod"), IO::Path;
-isa-ok file2io("-e"), Failure;
-isa-ok file2io("not-existing-path"), Failure;
-ok file2io("src/main.nqp").ends-with("src/main.nqp"),
-  "other system paths also handled ok";
 
 # vim: expandtab shiftwidth=4

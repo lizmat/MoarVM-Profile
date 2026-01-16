@@ -11,6 +11,7 @@ my sub MAIN(
     :$types             = 5, #= number of types to show
     :$routines-per-type = 3, #= number of routines/type
     :$gcs               = 5, #= number of gcs to show
+    :$type      = 'profile', #= type of profile to capture
     :$keep,                  #= keep result of code profile in NNNNNNN.db
     *@args                   #= filename or code to profile
 ) {
@@ -35,7 +36,7 @@ my sub MAIN(
               !! meh "'$file' does not appear to be a valid file";
         }
     }
-    report MoarVM::Profile.new(~@args, :$keep);
+    report MoarVM::Profile.new(~@args, :$keep, :$type);
 }
 
 # vim: expandtab shiftwidth=4
