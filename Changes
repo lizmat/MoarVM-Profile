@@ -1,6 +1,8 @@
 Revision history for MoarVM::Profile
 
 {{$NEXT}}
+
+0.0.7  2026-01-16T21:10:39+01:00
     - Add ::GC.report, and add reporting about GCs to the
       ::Profile.report by default
     - Quite a lot of reformatting in the reports

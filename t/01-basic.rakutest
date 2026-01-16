@@ -182,7 +182,6 @@ my sub test-target($source, $argument, $file, $target = $argument) {
         is-deeply $routine.lines-around, Nil, 'and no lines around either';
     }
     else {
-dd $target;
         is $routine.source,       $code,   'did we get the right source';
         is $routine.lines-around, $around, 'did we get the right around';
     }
