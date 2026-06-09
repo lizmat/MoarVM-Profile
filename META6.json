@@ -8,7 +8,7 @@
   "depends": {
     "runtime": {
       "requires": [
-        "DB::SQLite:ver<0.7+>",
+        "DB::SQLite:ver<0.7+>:api<1>",
         "JSON::Fast:ver<0.20+>:auth<zef:timo>"
       ]
     }
