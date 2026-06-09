@@ -8,7 +8,7 @@
   "depends": {
     "runtime": {
       "requires": [
-        "DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>",
+        "DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>",
         "JSON::Fast:ver<0.20+>:auth<zef:timo>"
       ]
     }
