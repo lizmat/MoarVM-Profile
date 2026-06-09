@@ -1,6 +1,6 @@
 use v6.*;  # want nano
 
-use DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>;
+use DB::SQLite:ver<0.7+>:api<1>;
 use JSON::Fast:ver<0.20+>:auth<zef:timo>;  # from-json
 
 #- private subroutines ---------------------------------------------------------
