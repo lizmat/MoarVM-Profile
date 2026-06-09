@@ -2,7 +2,7 @@ use Test;
 use DB::SQLite;
 use MoarVM::Profile;
 
-plan 6 * 130 + 16;
+plan 6 * 129 + 16;
 
 my constant $times = 1000000;
 
@@ -67,6 +67,8 @@ ok file2io("src/main.nqp").ends-with("src/main.nqp"),
 #- test-target -----------------------------------------------------------------
 my sub test-target($source, $argument, $file, $target = $argument) {
     diag "Testing profile from $source";
+
+#CONTROL { .throw }
 
     my $profile := MoarVM::Profile.new($argument);
     isa-ok $profile, MoarVM::Profile;
@@ -311,9 +313,6 @@ my sub test-target($source, $argument, $file, $target = $argument) {
     ok $extra-info<scdesc>:exists,       'scdesc appears to be there';
     ok $extra-info<type>:exists,         'type appears to be there';
     ok $extra-info<typename>:exists,     'typename appears to be there';
-
-    my $type-links := $type.type-links;
-    isa-ok $type-links, Map;
 
     $allocations := $type.allocations;
     isa-ok $allocations, Map;

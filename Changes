@@ -2,6 +2,12 @@ Revision history for MoarVM::Profile
 
 {{$NEXT}}
 
+0.0.8  2026-06-09T18:39:48+02:00
+    - Bump dependency
+    - Fix some warnings
+    - Remove support for MoarVM::Profile::Type.type-links
+      as it has been removed from the nqp::profile interface
+
 0.0.7  2026-01-16T21:10:39+01:00
     - Add ::GC.report, and add reporting about GCs to the
       ::Profile.report by default

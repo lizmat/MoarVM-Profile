@@ -1,7 +1,7 @@
 use v6.*;  # want nano
 
 use DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>;
-use JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>;  # from-json
+use JSON::Fast:ver<0.20+>:auth<zef:timo>;  # from-json
 
 #- private subroutines ---------------------------------------------------------
 my str @names = "";
@@ -207,8 +207,7 @@ class MoarVM::Profile::Overview does DefaultParts {
 class MoarVM::Profile::Type {
     has int @!parts      is built(:bind);
     has     $!profile    is built(:bind);
-    has     $!extra-info is built;;
-    has     $!type-links is built;;
+    has     $!extra-info is built;
     has     $!calls;
     has     $!allocations;
     has     $!allocated;
@@ -218,14 +217,13 @@ class MoarVM::Profile::Type {
         self.bless(
           :$profile,
           :parts(my int @ = @a[0].Int, name2index(@a[1])),
-          :extra-info(@a[2]),
-          :type-links(@a[3])
+          :extra-info(@a[2])
         )
     }
 
     method table(--> 'types') { }
     method method-names() is implementation-detail {
-        BEGIN <id name extra-info type-links>
+        BEGIN <id name extra-info>
     }
     method columns() {
         BEGIN $?CLASS.method-names.join(",").trans("-" => "_")
@@ -241,9 +239,6 @@ class MoarVM::Profile::Type {
 
     method extra-info(MoarVM::Profile::Type:D:) {
         ($_ := $!extra-info) ~~ Str ?? ($_ = from-json($_).Map) !! $_
-    }
-    method type-links(MoarVM::Profile::Type:D:) {
-        ($_ := $!type-links) ~~ Str ?? ($_ = from-json($_).Map) !! $_
     }
 
     # From .add-overview
@@ -687,7 +682,7 @@ class MoarVM::Profile::Deallocation does DefaultParts {
 }
 
 #- Profile creation ------------------------------------------------------------
-class MoarVM::Profile:ver<0.0.7>:auth<zef:lizmat> {
+class MoarVM::Profile:ver<0.0.8>:auth<zef:lizmat> {
     has $.target;
     has $.db;
     has $!source;
@@ -930,7 +925,12 @@ class MoarVM::Profile:ver<0.0.7>:auth<zef:lizmat> {
               ?? "From &bold($target) (created $when)\n"
               !! "From &bold($target) (changed $when)\n";
         }
-        add bold(self.source);
+        with self.source {
+            add bold($_);
+        }
+        else {
+            add "(no source available)";
+        }
 
         add "";
         add "Time Spent";

@@ -8,8 +8,8 @@
   "depends": {
     "runtime": {
       "requires": [
-        "DB::SQLite",
-        "JSON::Fast:ver<0.19+>:auth<cpan:TIMOTIMO>"
+        "DB::SQLite:ver<0.7+>:auth<github:CurtTilmes>:api<1>",
+        "JSON::Fast:ver<0.20+>:auth<zef:timo>"
       ]
     }
   },
@@ -35,5 +35,5 @@
   ],
   "test-depends": [
   ],
-  "version": "0.0.7"
+  "version": "0.0.8"
 }

@@ -825,10 +825,6 @@ Produce a report about this C<Type>, accepts these named arguments:
 The total number of allocations made for this type while the code
 in fact was speshed.
 
-=head3 type-links
-
-A C<Map> with extra information about this links to other types.
-
 =head1 EXPORTED SUBROUTINES
 
 =head2 file2io

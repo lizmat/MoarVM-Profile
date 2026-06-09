@@ -788,10 +788,6 @@ Produce a report about this `Type`, accepts these named arguments:
 
 The total number of allocations made for this type while the code in fact was speshed.
 
-### type-links
-
-A `Map` with extra information about this links to other types.
-
 EXPORTED SUBROUTINES
 ====================
 
